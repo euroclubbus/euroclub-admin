@@ -1,0 +1,40 @@
+// ВАЖЛИВО: панель не використовує Firebase Auth (лише простий пароль на
+// фронті), тому правила нижче НЕ можуть відрізнити "адміна з панелі" від
+// будь-кого іншого, хто знає назви колекцій. Це прийнятно для внутрішньої
+// панелі з довірених рук, але не є справжнім захистом запису.
+//
+// Якщо потрібен реальний захист запису (side_menu_items) — варіанти:
+// 1) Firebase App Check на панелі + правило allow write: if request.app... 
+// 2) Або перенести запис у side_menu_items через ту саму serverless-функцію
+//    (з паролем у заголовку), а не напряму з клієнта.
+// Поки що, за брифом, пишемо напряму з клієнта — нижче мінімально розумні
+// правила під це.
+
+rules_version = "2";
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Пункти бокового меню — додаток тільки читає, панель читає й пише.
+    match /side_menu_items/{itemId} {
+      allow read: if true;
+      allow write: if true; // див. коментар зверху
+    }
+
+    // FCM-токени — пише мобільний додаток при вході, панель тільки читає
+    // (і лише для підрахунку, ніколи не показує самі токени в UI).
+    match /device_tokens/{uid} {
+      allow read: if true;  // потрібно лише serverless-функції, можна
+                             // звузити до allow read: if false і рахувати
+                             // токени тільки в api/send-push.ts (server-side,
+                             // firebase-admin обходить ці правила).
+      allow write: if true; // пише додаток при логіні
+    }
+
+    // Історія розсилок — пише лише serverless-функція (firebase-admin
+    // ігнорує ці правила), панель тільки читає.
+    match /push_campaigns/{campaignId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
