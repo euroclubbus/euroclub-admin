@@ -4,6 +4,7 @@ import { Layout, Tab } from "./components/Layout";
 import { PushForm } from "./components/PushForm";
 import { PushHistory } from "./components/PushHistory";
 import { SideMenuList } from "./components/SideMenuList";
+import { FleetList } from "./components/FleetList";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -29,8 +30,10 @@ export default function App() {
           </div>
           <PushHistory refreshKey={refreshKey} />
         </div>
-      ) : (
+      ) : tab === "menu" ? (
         <SideMenuList />
+      ) : (
+        <FleetList />
       )}
     </Layout>
   );

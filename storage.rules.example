@@ -1,0 +1,15 @@
+// Firebase Storage — тільки для фото автопарку (і надалі, інших медіа-блоків).
+// Той самий компроміс без Auth, що й у firestore.rules.example: панель пише
+// напряму з клієнта, довірені руки, не справжній захист запису.
+//
+// Скопіювати в Firebase Console → Storage → Rules.
+
+rules_version = "2";
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /fleet/{fileName} {
+      allow read: if true;   // застосунок показує фото всім
+      allow write: if true;  // панель завантажує/видаляє
+    }
+  }
+}

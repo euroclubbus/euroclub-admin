@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // Значення підставляються з .env (див. .env.example) під час білду Vite.
 // Це той самий Firebase-проєкт, що й у мобільному додатку euroclub-app —
@@ -15,3 +16,4 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const storage = getStorage(app);

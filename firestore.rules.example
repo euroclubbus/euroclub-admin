@@ -36,5 +36,12 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+
+    // Автопарк — картки автобусів для сторінки в додатку. Додаток тільки
+    // читає, панель читає й пише (той самий компроміс без Auth, див. коментар зверху).
+    match /fleet/{busId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }
