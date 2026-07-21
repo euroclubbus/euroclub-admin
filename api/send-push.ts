@@ -27,10 +27,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { title, body, deepLink } = req.body ?? {};
+  const { title, body, deepLink, userIds } = req.body ?? {};
 
   if (typeof title !== "string" || !title.trim() || typeof body !== "string" || !body.trim()) {
     res.status(400).json({ error: "Потрібні поля title і body" });
+    return;
+  }
+  if (userIds !== undefined && !Array.isArray(userIds)) {
+    res.status(400).json({ error: "userIds має бути масивом" });
     return;
   }
 
@@ -39,10 +43,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getFirestore(app);
     const messaging = getMessaging(app);
 
-    const tokensSnap = await db.collection("device_tokens").get();
-    const tokens = tokensSnap.docs
-      .map((d) => (d.data() as { token?: string }).token)
-      .filter((t): t is string => Boolean(t));
+    // userIds не задано (або порожній масив із явним прапорцем all) — розсилка всім,
+    // як і раніше. userIds задано — цільова розсилка лише цим користувачам
+    // (сегмент зі звіту, або відповідь у Вхідних одному конкретному id).
+    let tokens: string[];
+    if (Array.isArray(userIds) && userIds.length > 0) {
+      const docs = await Promise.all(userIds.map((uid: string) => db.collection("device_tokens").doc(String(uid)).get()));
+      tokens = docs.map((d) => (d.data() as { token?: string } | undefined)?.token).filter((t): t is string => Boolean(t));
+    } else {
+      const tokensSnap = await db.collection("device_tokens").get();
+      tokens = tokensSnap.docs.map((d) => (d.data() as { token?: string }).token).filter((t): t is string => Boolean(t));
+    }
 
     const targetCount = tokens.length;
     let successCount = 0;
@@ -67,15 +78,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status = successCount === targetCount ? "sent" : successCount > 0 ? "partial" : "failed";
     }
 
-    await db.collection("push_campaigns").add({
-      title: title.trim(),
-      body: body.trim(),
-      deepLink: deepLink ? String(deepLink) : null,
-      sentAt: Date.now(),
-      targetCount,
-      successCount,
-      status,
-    });
+    const silent = req.body?.silent === true; // відповіді у Вхідних не засмічують історію розсилок
+    if (!silent) {
+      await db.collection("push_campaigns").add({
+        title: title.trim(),
+        body: body.trim(),
+        deepLink: deepLink ? String(deepLink) : null,
+        sentAt: Date.now(),
+        targetCount,
+        successCount,
+        status,
+        segment: Array.isArray(userIds) && userIds.length > 0 ? userIds.length : null, // null = всім
+      });
+    }
 
     res.status(200).json({ targetCount, successCount, status });
   } catch (err) {

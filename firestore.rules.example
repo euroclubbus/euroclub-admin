@@ -43,5 +43,23 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Статичні сторінки-конструктор (соцмережі й інші) — додаток читає, панель пише.
+    match /pages/{pageId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Маршрути — додаток читає, панель пише.
+    match /routes/{routeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Звернення "Залишити відгук" — двосторонній тред за ID користувача (без email/телефону).
+    match /feedback_threads/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

@@ -11,5 +11,9 @@ service firebase.storage {
       allow read: if true;   // застосунок показує фото всім
       allow write: if true;  // панель завантажує/видаляє
     }
+    match /pages/{pageId}/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

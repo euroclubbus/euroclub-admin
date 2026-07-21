@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
-import { Bell, ListTree, Bus, Truck } from "lucide-react";
+import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus } from "lucide-react";
 
-export type Tab = "push" | "menu" | "fleet";
+export type Tab = "push" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report";
 
 interface Props {
   active: Tab;
@@ -13,6 +13,10 @@ const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "push", label: "Push-розсилки", icon: Bell, hint: "01" },
   { id: "menu", label: "Бокове меню", icon: ListTree, hint: "02" },
   { id: "fleet", label: "Автопарк", icon: Truck, hint: "03" },
+  { id: "routes", label: "Маршрути", icon: Waypoints, hint: "04" },
+  { id: "pages", label: "Сторінки", icon: FileText, hint: "05" },
+  { id: "inbox", label: "Вхідні", icon: Inbox, hint: "06" },
+  { id: "report", label: "Звіт і сегменти", icon: BarChart3, hint: "07" },
 ];
 
 export function Layout({ active, onChange, children }: Props) {

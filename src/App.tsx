@@ -5,6 +5,10 @@ import { PushForm } from "./components/PushForm";
 import { PushHistory } from "./components/PushHistory";
 import { SideMenuList } from "./components/SideMenuList";
 import { FleetList } from "./components/FleetList";
+import { PagesList } from "./components/PagesList";
+import { RoutesList } from "./components/RoutesList";
+import { InboxList } from "./components/InboxList";
+import { ReportFilters } from "./components/ReportFilters";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -32,8 +36,16 @@ export default function App() {
         </div>
       ) : tab === "menu" ? (
         <SideMenuList />
-      ) : (
+      ) : tab === "fleet" ? (
         <FleetList />
+      ) : tab === "routes" ? (
+        <RoutesList />
+      ) : tab === "pages" ? (
+        <PagesList />
+      ) : tab === "inbox" ? (
+        <InboxList />
+      ) : (
+        <ReportFilters />
       )}
     </Layout>
   );
