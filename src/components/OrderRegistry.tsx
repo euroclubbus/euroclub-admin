@@ -11,18 +11,32 @@ function fmtDateTime(iso: string) {
   return d.toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPassenger[] {
+  // Старі записи (до появи знижки/ціни окремими полями) можуть не мати discountName/
+  // discountPercent/price взагалі — Firestore відмовляється писати undefined в документ,
+  // тому без цієї нормалізації "Зберегти зміни" мовчки падало з помилкою.
+  return (list || []).map((p) => {
+    const tariff = Number(p.tariff) || 0;
+    const discountPercent = Number(p.discountPercent) || 0;
+    const discountName = p.discountName || (discountPercent === 0 ? "Повний тариф" : "");
+    const price = p.price != null ? Number(p.price) : Math.round(tariff * (1 - discountPercent / 100));
+    return { ...p, tariff, discountPercent, discountName, price };
+  });
+}
+
 function OrderRow({ order }: { order: OrderRegistryDoc }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [draft, setDraft] = useState<OrderRegistryPassenger[]>(order.passengers || []);
+  const [draft, setDraft] = useState<OrderRegistryPassenger[]>(normalizePassengers(order.passengers));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!open) setDraft(order.passengers || []);
+    if (!open) setDraft(normalizePassengers(order.passengers));
   }, [order.passengers, open]);
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(order.passengers || []);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(normalizePassengers(order.passengers));
 
   function onDiscountChange(idx: number, name: string) {
     const item = DISCOUNT_CATALOG.find((c) => c.name === name);
@@ -48,20 +62,25 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
 
   async function saveChanges() {
     setSaving(true);
+    setError("");
     try {
+      const normalizedBefore = normalizePassengers(order.passengers);
       const edits: OrderRegistryEdit[] = [];
       const now = new Date().toISOString();
       draft.forEach((p) => {
-        const before = (order.passengers || []).find((x) => x.index === p.index);
+        const before = normalizedBefore.find((x) => x.index === p.index);
         if (!before) return;
         if (before.tariff !== p.tariff) edits.push({ at: now, passengerIndex: p.index, field: "tariff", oldValue: before.tariff, newValue: p.tariff });
         if (before.discountName !== p.discountName) edits.push({ at: now, passengerIndex: p.index, field: "discount", oldValue: before.discountName, newValue: p.discountName });
         if (before.price !== p.price) edits.push({ at: now, passengerIndex: p.index, field: "price", oldValue: before.price, newValue: p.price });
       });
       const ref = doc(db, "order_registry", order.orderNo);
-      await updateDoc(ref, { passengers: draft, editHistory: [...(order.editHistory || []), ...edits] });
+      await updateDoc(ref, { passengers: normalizePassengers(draft), editHistory: [...(order.editHistory || []), ...edits] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (e: any) {
+      console.error("[OrderRegistry] save failed", e);
+      setError(e?.message || "Не вдалося зберегти");
     } finally {
       setSaving(false);
     }
@@ -130,6 +149,7 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
             </button>
           </div>
           <div style={styles.hint}>Після збереження застосунок покаже нову суму одразу при оновленні сторінки замовлення.</div>
+          {error && <div style={styles.error}>Помилка збереження: {error}</div>}
 
           <button onClick={() => setShowHistory((s) => !s)} style={styles.historyToggle}>
             <History size={13} /> Історія правок ({allHistory.length})
@@ -224,6 +244,7 @@ const styles: Record<string, React.CSSProperties> = {
   totalLine: { fontSize: 13, color: "var(--text-muted)" },
   saveBtn: { background: "var(--amber)", border: "none", borderRadius: "var(--radius)", padding: "9px 18px", fontSize: 12.5, fontWeight: 600, color: "#1a1305" },
   hint: { fontSize: 11, color: "var(--text-faint)", marginTop: 6 },
+  error: { fontSize: 12, color: "var(--danger)", marginTop: 6 },
   historyToggle: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, marginTop: 14, cursor: "pointer", padding: 0 },
   historyList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 4 },
   historyItem: { fontSize: 11.5, color: "var(--text-faint)" },
