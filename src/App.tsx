@@ -9,6 +9,8 @@ import { PagesList } from "./components/PagesList";
 import { RoutesList } from "./components/RoutesList";
 import { InboxList } from "./components/InboxList";
 import { ReportFilters } from "./components/ReportFilters";
+import { OrderRegistry } from "./components/OrderRegistry";
+import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -44,8 +46,17 @@ export default function App() {
         <PagesList />
       ) : tab === "inbox" ? (
         <InboxList />
-      ) : (
+      ) : tab === "report" ? (
         <ReportFilters />
+      ) : tab === "registry" ? (
+        <OrderRegistry />
+      ) : (
+        <div>
+          <header style={{ marginBottom: 24 }}>
+            <h1 style={headerTitle}>Налаштування</h1>
+          </header>
+          <ExchangeRateSettings />
+        </div>
       )}
     </Layout>
   );

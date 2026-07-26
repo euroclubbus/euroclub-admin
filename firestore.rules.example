@@ -61,5 +61,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Реєстр замовлень — додаток пише один раз при бронюванні, панель читає й редагує
+    // (знижка/тариф пасажира, з історією правок).
+    match /order_registry/{orderNo} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Загальні налаштування (курс валют і т.п.) — застосунок читає, панель пише.
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

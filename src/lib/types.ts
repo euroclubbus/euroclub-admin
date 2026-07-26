@@ -119,6 +119,33 @@ export interface PageDoc {
 
 export type EuroClass = "Euro 5" | "Euro 6";
 
+export interface OrderRegistryPassenger {
+  index: number;
+  ticketNumber: string;
+  discountId: string;
+  tariff: number;
+}
+
+export interface OrderRegistryEdit {
+  at: string; // ISO
+  passengerIndex: number;
+  field: "discountId" | "tariff";
+  oldValue: string | number;
+  newValue: string | number;
+}
+
+export interface OrderRegistryDoc {
+  orderNo: string; // = id документа
+  fromCity: string;
+  toCity: string;
+  tripDate: string;
+  tripDate2?: string;
+  roundTrip: boolean;
+  createdAt: string; // ISO
+  passengers: OrderRegistryPassenger[];
+  editHistory: OrderRegistryEdit[];
+}
+
 export interface FleetAmenities {
   climate: boolean; // клімат-контроль
   vip: boolean; // віп-салон
