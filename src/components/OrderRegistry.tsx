@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, doc, getDoc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
-import { ChevronDown, ChevronRight, History, Search } from "lucide-react";
+import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
+import { Check, ChevronDown, ChevronRight, History, Search } from "lucide-react";
 import { db } from "../lib/firebase";
-import { OrderRegistryDoc, OrderRegistryEdit } from "../lib/types";
+import { DISCOUNT_CATALOG, OrderRegistryDoc, OrderRegistryEdit, OrderRegistryPassenger } from "../lib/types";
 
 function fmtDateTime(iso: string) {
   if (!iso) return "";
@@ -14,27 +14,61 @@ function fmtDateTime(iso: string) {
 function OrderRow({ order }: { order: OrderRegistryDoc }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [savingIdx, setSavingIdx] = useState<number | null>(null);
+  const [draft, setDraft] = useState<OrderRegistryPassenger[]>(order.passengers || []);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  async function saveEdit(passengerIndex: number, field: "discountId" | "tariff", oldValue: string | number, newValue: string | number) {
-    if (String(oldValue) === String(newValue)) return;
-    setSavingIdx(passengerIndex);
+  useEffect(() => {
+    if (!open) setDraft(order.passengers || []);
+  }, [order.passengers, open]);
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(order.passengers || []);
+
+  function onDiscountChange(idx: number, name: string) {
+    const item = DISCOUNT_CATALOG.find((c) => c.name === name);
+    if (!item) return;
+    setDraft((d) =>
+      d.map((p) =>
+        p.index === idx
+          ? { ...p, discountName: item.name, discountPercent: item.percent, price: Math.round(p.tariff * (1 - item.percent / 100)) }
+          : p
+      )
+    );
+  }
+
+  function onTariffChange(idx: number, tariff: number) {
+    setDraft((d) =>
+      d.map((p) => (p.index === idx ? { ...p, tariff, price: Math.round(tariff * (1 - p.discountPercent / 100)) } : p))
+    );
+  }
+
+  function onPriceChange(idx: number, price: number) {
+    setDraft((d) => d.map((p) => (p.index === idx ? { ...p, price } : p)));
+  }
+
+  async function saveChanges() {
+    setSaving(true);
     try {
+      const edits: OrderRegistryEdit[] = [];
+      const now = new Date().toISOString();
+      draft.forEach((p) => {
+        const before = (order.passengers || []).find((x) => x.index === p.index);
+        if (!before) return;
+        if (before.tariff !== p.tariff) edits.push({ at: now, passengerIndex: p.index, field: "tariff", oldValue: before.tariff, newValue: p.tariff });
+        if (before.discountName !== p.discountName) edits.push({ at: now, passengerIndex: p.index, field: "discount", oldValue: before.discountName, newValue: p.discountName });
+        if (before.price !== p.price) edits.push({ at: now, passengerIndex: p.index, field: "price", oldValue: before.price, newValue: p.price });
+      });
       const ref = doc(db, "order_registry", order.orderNo);
-      const snap = await getDoc(ref);
-      const current = (snap.data() as OrderRegistryDoc) || order;
-      const passengers = current.passengers.map((p) =>
-        p.index === passengerIndex ? { ...p, [field]: field === "tariff" ? Number(newValue) : String(newValue) } : p
-      );
-      const edit: OrderRegistryEdit = { at: new Date().toISOString(), passengerIndex, field, oldValue, newValue };
-      const editHistory = [...(current.editHistory || []), edit];
-      await updateDoc(ref, { passengers, editHistory });
+      await updateDoc(ref, { passengers: draft, editHistory: [...(order.editHistory || []), ...edits] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } finally {
-      setSavingIdx(null);
+      setSaving(false);
     }
   }
 
   const allHistory = [...(order.editHistory || [])].sort((a, b) => b.at.localeCompare(a.at));
+  const total = draft.reduce((s, p) => s + (Number(p.price) || 0), 0);
 
   return (
     <div style={styles.row}>
@@ -57,56 +91,45 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
               <tr>
                 <th style={styles.th}>Пасажир</th>
                 <th style={styles.th}>Квиток</th>
-                <th style={styles.th}>Тип</th>
                 <th style={styles.th}>Знижка</th>
                 <th style={styles.th}>Тариф</th>
+                <th style={styles.th}>Ціна</th>
               </tr>
             </thead>
             <tbody>
-              {order.passengers?.map((p) => {
-                const isFull = String(p.discountId) === "0";
-                return (
-                  <tr key={p.index}>
-                    <td style={styles.td}>Пасажир {p.index}</td>
-                    <td style={styles.td}>{p.ticketNumber || "—"}</td>
-                    <td style={styles.td}>{isFull ? "Повний" : "Зі знижкою"}</td>
-                    <td style={styles.td}>
-                      <select
-                        value={isFull ? "0" : "custom"}
-                        onChange={(e) => {
-                          if (e.target.value === "0") saveEdit(p.index, "discountId", p.discountId, "0");
-                        }}
-                        style={styles.select}
-                        disabled={savingIdx === p.index}
-                      >
-                        <option value="0">Повний тариф (0)</option>
-                        <option value="custom">Зі знижкою…</option>
-                      </select>
-                      {!isFull && (
-                        <input
-                          type="text"
-                          defaultValue={p.discountId}
-                          onBlur={(e) => saveEdit(p.index, "discountId", p.discountId, e.target.value)}
-                          placeholder="код знижки"
-                          style={{ ...styles.input, width: 70, marginTop: 4 }}
-                          disabled={savingIdx === p.index}
-                        />
-                      )}
-                    </td>
-                    <td style={styles.td}>
-                      <input
-                        type="number"
-                        defaultValue={p.tariff}
-                        onBlur={(e) => saveEdit(p.index, "tariff", p.tariff, Number(e.target.value))}
-                        style={{ ...styles.input, width: 90 }}
-                        disabled={savingIdx === p.index}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
+              {draft.map((p) => (
+                <tr key={p.index}>
+                  <td style={styles.td}>Пасажир {p.index}</td>
+                  <td style={styles.td}>{p.ticketNumber || "—"}</td>
+                  <td style={styles.td}>
+                    <select value={p.discountName || "Повний тариф"} onChange={(e) => onDiscountChange(p.index, e.target.value)} style={styles.select}>
+                      {DISCOUNT_CATALOG.map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.name} ({c.percent}%)
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td style={styles.td}>
+                    <input type="number" value={p.tariff} onChange={(e) => onTariffChange(p.index, Number(e.target.value))} style={{ ...styles.input, width: 90 }} />
+                  </td>
+                  <td style={styles.td}>
+                    <input type="number" value={p.price} onChange={(e) => onPriceChange(p.index, Number(e.target.value))} style={{ ...styles.input, width: 90, fontWeight: 700 }} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
+
+          <div style={styles.footer}>
+            <div style={styles.totalLine}>
+              Усього: <strong>{total} ₴</strong>
+            </div>
+            <button onClick={saveChanges} disabled={!dirty || saving} style={{ ...styles.saveBtn, opacity: !dirty || saving ? 0.5 : 1 }}>
+              {saved ? <Check size={14} /> : saving ? "Збереження…" : "Зберегти зміни"}
+            </button>
+          </div>
+          <div style={styles.hint}>Після збереження застосунок покаже нову суму одразу при оновленні сторінки замовлення.</div>
 
           <button onClick={() => setShowHistory((s) => !s)} style={styles.historyToggle}>
             <History size={13} /> Історія правок ({allHistory.length})
@@ -116,7 +139,8 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
               {allHistory.length === 0 && <div style={styles.mutedSmall}>Ще нема правок</div>}
               {allHistory.map((e, i) => (
                 <div key={i} style={styles.historyItem}>
-                  {fmtDateTime(e.at)} — Пасажир {e.passengerIndex}, {e.field === "tariff" ? "тариф" : "знижка"}: {String(e.oldValue)} → {String(e.newValue)}
+                  {fmtDateTime(e.at)} — Пасажир {e.passengerIndex}, {e.field === "tariff" ? "тариф" : e.field === "price" ? "ціна" : "знижка"}:{" "}
+                  {String(e.oldValue)} → {String(e.newValue)}
                 </div>
               ))}
             </div>
@@ -156,19 +180,14 @@ export function OrderRegistry() {
       <header style={{ marginBottom: 20 }}>
         <h1 style={styles.title}>Реєстр замовлень</h1>
         <p style={styles.subtitle}>
-          Усі замовлення (в один і в два боки). Редагування знижки/тарифу тут поки що не передається назад на
-          бекенд автоматично — веди значення однаковими вручну в обох місцях, поки не буде готовий API-метод.
+          Усі замовлення (в один і в два боки). Зміни зберігаються сюди й одразу видно в застосунку — але назад на
+          бекенд бронювання поки що НЕ передаються автоматично, поки не буде готовий API-метод.
         </p>
       </header>
 
       <div style={styles.searchBar}>
         <Search size={15} color="var(--text-faint)" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Пошук за номером замовлення…"
-          style={styles.searchInput}
-        />
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук за номером замовлення…" style={styles.searchInput} />
       </div>
 
       {loading && <div style={styles.empty}>Завантаження…</div>}
@@ -185,7 +204,7 @@ export function OrderRegistry() {
 
 const styles: Record<string, React.CSSProperties> = {
   title: { fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 },
-  subtitle: { color: "var(--text-muted)", fontSize: 13, marginTop: 6, maxWidth: 520 },
+  subtitle: { color: "var(--text-muted)", fontSize: 13, marginTop: 6, maxWidth: 560 },
   searchBar: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "10px 14px", marginBottom: 16 },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
@@ -198,10 +217,14 @@ const styles: Record<string, React.CSSProperties> = {
   detail: { padding: "0 14px 14px", borderTop: "1px solid var(--hairline)" },
   table: { width: "100%", borderCollapse: "collapse", marginTop: 10 },
   th: { textAlign: "left", fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-faint)", padding: "6px 8px", borderBottom: "1px solid var(--hairline)" },
-  td: { padding: "8px 8px", fontSize: 12.5, borderBottom: "1px solid var(--hairline)", verticalAlign: "top" },
-  select: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "4px 6px", fontSize: 12, color: "var(--text)" },
-  input: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "4px 6px", fontSize: 12, color: "var(--text)" },
-  historyToggle: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, marginTop: 10, cursor: "pointer", padding: 0 },
+  td: { padding: "8px 8px", fontSize: 12.5, borderBottom: "1px solid var(--hairline)", verticalAlign: "middle" },
+  select: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "5px 6px", fontSize: 12, color: "var(--text)" },
+  input: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "5px 6px", fontSize: 12, color: "var(--text)" },
+  footer: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
+  totalLine: { fontSize: 13, color: "var(--text-muted)" },
+  saveBtn: { background: "var(--amber)", border: "none", borderRadius: "var(--radius)", padding: "9px 18px", fontSize: 12.5, fontWeight: 600, color: "#1a1305" },
+  hint: { fontSize: 11, color: "var(--text-faint)", marginTop: 6 },
+  historyToggle: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, marginTop: 14, cursor: "pointer", padding: 0 },
   historyList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 4 },
   historyItem: { fontSize: 11.5, color: "var(--text-faint)" },
   mutedSmall: { fontSize: 11.5, color: "var(--text-faint)" },

@@ -119,17 +119,33 @@ export interface PageDoc {
 
 export type EuroClass = "Euro 5" | "Euro 6";
 
+// Каталог знижок — назви й відсотки підтверджені з реальних тестів пікера знижок у
+// застосунку (одна база — 5500грн повний тариф, решта — спостережені ціни від неї).
+// Якщо прогер колись дасть точний перелік з ID — звірити й підправити.
+export const DISCOUNT_CATALOG: { name: string; percent: number }[] = [
+  { name: "Повний тариф", percent: 0 },
+  { name: "Особи, старші за 60", percent: 10 },
+  { name: "Особи з інвалідністю (I-II групи)", percent: 10 },
+  { name: "Військовослужбовці з УБД", percent: 20 },
+  { name: "Тварина", percent: 20 },
+  { name: "Доп. місце", percent: 20 },
+  { name: "Діти 1-10 років", percent: 30 },
+  { name: "Діти до 1 року", percent: 50 },
+];
+
 export interface OrderRegistryPassenger {
   index: number;
   ticketNumber: string;
-  discountId: string;
-  tariff: number;
+  discountName: string;
+  discountPercent: number;
+  tariff: number; // повна ціна квитка (до знижки)
+  price: number; // тариф з урахуванням знижки — те, що реально бачить і платить пасажир
 }
 
 export interface OrderRegistryEdit {
   at: string; // ISO
   passengerIndex: number;
-  field: "discountId" | "tariff";
+  field: "discount" | "tariff" | "price";
   oldValue: string | number;
   newValue: string | number;
 }
