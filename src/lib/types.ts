@@ -168,6 +168,12 @@ export interface OrderRegistryDoc {
   editHistory: OrderRegistryEdit[];
   surcharges?: OrderSurcharge[];
   paid?: boolean;
+  // Реальний статус/оплата з бекенду — синхронізується автоматично застосунком під час
+  // опитування, ніяк не пов'язано з ручним перемикачем "Оплачено" вище.
+  backendStatus?: number | string | null; // 0=скасовано, 1=не сплачено, 2=оплачено(попереду), 3=оплачено(завершено)
+  backendPaidUah?: number;
+  backendPaidEur?: number;
+  backendSyncedAt?: string;
 }
 
 export interface FleetAmenities {

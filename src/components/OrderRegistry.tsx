@@ -6,6 +6,16 @@ import { DISCOUNT_CATALOG, OrderRegistryDoc, OrderRegistryEdit, OrderRegistryPas
 
 const SURCHARGE_REASONS = ["Зміна дати", "Зміна місця відправлення", "Зміна пасажира", "Інше"];
 
+function backendStatusLabel(status: any): { text: string; color: string } {
+  const n = Number(status);
+  if (status == null || status === "") return { text: "ще невідомо", color: "var(--text-faint)" };
+  if (n === 0) return { text: "скасовано", color: "var(--danger)" };
+  if (n === 1) return { text: "не сплачено", color: "#E0A100" };
+  if (n === 2) return { text: "оплачено (попереду)", color: "#4CAF50" };
+  if (n === 3) return { text: "оплачено (завершено)", color: "#4CAF50" };
+  return { text: String(status), color: "var(--text-faint)" };
+}
+
 function fmtDateTime(iso: string) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -135,7 +145,13 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
       <button onClick={() => setOpen((o) => !o)} style={styles.rowHeader}>
         {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         <div style={{ flex: 1, textAlign: "left" }}>
-          <div style={styles.orderNo}>№ {order.orderNo}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={styles.orderNo}>№ {order.orderNo}</span>
+            {(() => {
+              const bs = backendStatusLabel(order.backendStatus);
+              return <span style={{ fontSize: 10.5, fontWeight: 700, color: bs.color, border: `1px solid ${bs.color}`, borderRadius: 20, padding: "1px 8px" }}>{bs.text}</span>;
+            })()}
+          </div>
           <div style={styles.rowMeta}>
             {order.fromCity} → {order.toCity} · {order.tripDate}
             {order.roundTrip && order.tripDate2 ? ` · назад ${order.tripDate2}` : ""} · {order.passengers?.length ?? 0} пас.
@@ -203,6 +219,20 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
             </div>
             <span style={{ fontWeight: 700, fontSize: 13.5 }}>{paid ? "Оплачено" : "Не оплачено"}</span>
           </button>
+          <div style={styles.backendStatusLine}>
+            {(() => {
+              const bs = backendStatusLabel(order.backendStatus);
+              return (
+                <>
+                  Реальний статус з бекенду: <strong style={{ color: bs.color }}>{bs.text}</strong>
+                  {(order.backendPaidUah || order.backendPaidEur) ? (
+                    <> · сплачено {order.backendPaidUah ? `${order.backendPaidUah} ₴` : ""}{order.backendPaidUah && order.backendPaidEur ? " / " : ""}{order.backendPaidEur ? `${order.backendPaidEur} €` : ""}</>
+                  ) : null}
+                  {order.backendSyncedAt && <span style={styles.mutedSmall}> (оновлено {fmtDateTime(order.backendSyncedAt)})</span>}
+                </>
+              );
+            })()}
+          </div>
 
           {paid && (
             <div style={styles.surchargeBlock}>
@@ -345,6 +375,7 @@ const styles: Record<string, React.CSSProperties> = {
   error: { fontSize: 12, color: "var(--danger)", marginTop: 6 },
   surchargeBlock: { marginTop: 12, padding: 12, background: "var(--surface-raised)", borderRadius: "var(--radius)", border: "1px dashed var(--hairline-strong)" },
   paidToggle: { display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", marginTop: 14, padding: 0 },
+  backendStatusLine: { fontSize: 11.5, color: "var(--text-muted)", marginTop: 6 },
   surchargeEditRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
   iconBtn: { background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: 2, display: "flex" },
   surchargeTitle: { fontSize: 12.5, fontWeight: 700, marginBottom: 4 },
