@@ -145,7 +145,7 @@ export interface OrderRegistryPassenger {
 export interface OrderRegistryEdit {
   at: string; // ISO
   passengerIndex: number;
-  field: "discount" | "tariff" | "price";
+  field: "discount" | "tariff" | "price" | "status";
   oldValue: string | number;
   newValue: string | number;
 }
@@ -167,6 +167,7 @@ export interface OrderRegistryDoc {
   passengers: OrderRegistryPassenger[];
   editHistory: OrderRegistryEdit[];
   surcharges?: OrderSurcharge[];
+  paid?: boolean;
 }
 
 export interface FleetAmenities {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
-import { Check, ChevronDown, ChevronRight, History, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, History, Plus, Search, X } from "lucide-react";
 import { db } from "../lib/firebase";
 import { DISCOUNT_CATALOG, OrderRegistryDoc, OrderRegistryEdit, OrderRegistryPassenger, OrderSurcharge } from "../lib/types";
 
@@ -33,40 +33,44 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
   // застарілий стан інших. Незачеплені пасажири завжди читаються напряму з order.passengers
   // (живі, onSnapshot), тільки реально відредаговані поля лежать тут до збереження.
   const [patches, setPatches] = useState<Record<number, Partial<OrderRegistryPassenger>>>({});
+  const [paidPatch, setPaidPatch] = useState<boolean | null>(null);
+  const [surchargesPatch, setSurchargesPatch] = useState<OrderSurcharge[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [scAmount, setScAmount] = useState("");
   const [scReason, setScReason] = useState(SURCHARGE_REASONS[0]);
   const [scCustom, setScCustom] = useState("");
-  const [scSaving, setScSaving] = useState(false);
 
-  async function addSurcharge() {
+  const paid = paidPatch !== null ? paidPatch : !!order.paid;
+  const surcharges = surchargesPatch !== null ? surchargesPatch : order.surcharges || [];
+
+  // Доплату можна додавати/редагувати/видаляти тільки в оплаченому замовленні — і все це
+  // так само чернетка, комітиться разом з рештою по кнопці "Зберегти зміни", не окремо.
+  function addSurchargeLocal() {
     const amount = Number(scAmount);
     if (!(amount > 0)) return;
     const reason = scReason === "Інше" ? (scCustom.trim() || "Інше") : scReason;
-    setScSaving(true);
-    try {
-      const ref = doc(db, "order_registry", order.orderNo);
-      const entry: OrderSurcharge = { amount, reason, at: new Date().toISOString() };
-      await updateDoc(ref, { surcharges: [...(order.surcharges || []), entry] });
-      setScAmount("");
-      setScCustom("");
-    } catch (e: any) {
-      setError(e?.message || "Не вдалося додати доплату");
-    } finally {
-      setScSaving(false);
-    }
+    const entry: OrderSurcharge = { amount, reason, at: new Date().toISOString() };
+    setSurchargesPatch([...surcharges, entry]);
+    setScAmount("");
+    setScCustom("");
+  }
+  function removeSurchargeLocal(idx: number) {
+    setSurchargesPatch(surcharges.filter((_, i) => i !== idx));
+  }
+  function editSurchargeLocal(idx: number, patch: Partial<OrderSurcharge>) {
+    setSurchargesPatch(surcharges.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
   }
 
   const baseline = normalizePassengers(order.passengers);
   const draft = baseline.map((p) => ({ ...p, ...(patches[p.index] || {}) }));
-  const dirty = Object.keys(patches).length > 0;
+  const dirty = Object.keys(patches).length > 0 || paidPatch !== null || surchargesPatch !== null;
 
   // Скидаємо патчі, коли картку закривають — наступного відкриття завжди з чистого аркуша
   // і актуальних даних, а не з того, що могло лишитись від минулого разу.
   useEffect(() => {
-    if (!open) setPatches({});
+    if (!open) { setPatches({}); setPaidPatch(null); setSurchargesPatch(null); }
   }, [open]);
 
   function patchPassenger(idx: number, patch: Partial<OrderRegistryPassenger>) {
@@ -105,9 +109,14 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
         if (before.discountName !== p.discountName) edits.push({ at: now, passengerIndex: p.index, field: "discount", oldValue: before.discountName, newValue: p.discountName });
         if (before.price !== p.price) edits.push({ at: now, passengerIndex: p.index, field: "price", oldValue: before.price, newValue: p.price });
       });
+      if (paidPatch !== null && paidPatch !== !!order.paid) {
+        edits.push({ at: now, passengerIndex: 0, field: "status", oldValue: order.paid ? "оплачено" : "не оплачено", newValue: paid ? "оплачено" : "не оплачено" });
+      }
       const ref = doc(db, "order_registry", order.orderNo);
-      await updateDoc(ref, { passengers: draft, editHistory: [...(order.editHistory || []), ...edits] });
+      await updateDoc(ref, { passengers: draft, paid, surcharges, editHistory: [...(order.editHistory || []), ...edits] });
       setPatches({});
+      setPaidPatch(null);
+      setSurchargesPatch(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
@@ -183,37 +192,62 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
           <div style={styles.hint}>Після збереження застосунок покаже нову суму одразу при оновленні сторінки замовлення.</div>
           {error && <div style={styles.error}>Помилка збереження: {error}</div>}
 
-          <div style={styles.surchargeBlock}>
-            <div style={styles.surchargeTitle}>Доплата (причина завжди вказується тут)</div>
-            <div style={styles.surchargeHint}>
-              Суму доплати застосунок бере: для замовлень в один бік — живою з бекенду (needpay), для замовлень в
-              два боки — з різниці нашої ціни й оплаченого. Тут вказуєш тільки ПРИЧИНУ — вона показується
-              користувачу поруч із сумою доплати.
+          <button onClick={() => setPaidPatch(!paid)} style={styles.paidToggle}>
+            <div style={{
+              width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+              border: `2px solid ${paid ? "var(--amber)" : "var(--hairline-strong)"}`,
+              background: paid ? "var(--amber)" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {paid && <Check size={13} color="#1a1305" />}
             </div>
-            {(order.surcharges || []).length > 0 && (
-              <div style={styles.surchargeList}>
-                {(order.surcharges || []).map((s, i) => (
-                  <div key={i} style={styles.surchargeItem}>
-                    {fmtDateTime(s.at)} — {s.reason}: <strong>{s.amount} ₴</strong>
-                  </div>
-                ))}
+            <span style={{ fontWeight: 700, fontSize: 13.5 }}>{paid ? "Оплачено" : "Не оплачено"}</span>
+          </button>
+
+          {paid && (
+            <div style={styles.surchargeBlock}>
+              <div style={styles.surchargeTitle}>Доплата (причина завжди вказується тут)</div>
+              <div style={styles.surchargeHint}>
+                Суму доплати застосунок бере: для замовлень в один бік — живою з бекенду (needpay), для замовлень в
+                два боки — з різниці нашої ціни й оплаченого. Тут вказуєш тільки ПРИЧИНУ — вона показується
+                користувачу поруч із сумою доплати. Доплату можна додати, відредагувати або видалити — усе
+                застосовується разом із рештою правок по кнопці "Зберегти зміни" вище.
               </div>
-            )}
-            <div style={styles.surchargeForm}>
-              <select value={scReason} onChange={(e) => setScReason(e.target.value)} style={styles.select}>
-                {SURCHARGE_REASONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-              {scReason === "Інше" && (
-                <input value={scCustom} onChange={(e) => setScCustom(e.target.value)} placeholder="Опис причини" style={{ ...styles.input, width: 140 }} />
+              {surcharges.length > 0 && (
+                <div style={styles.surchargeList}>
+                  {surcharges.map((s, i) => (
+                    <div key={i} style={styles.surchargeEditRow}>
+                      <select value={s.reason} onChange={(e) => editSurchargeLocal(i, { reason: e.target.value })} style={styles.select}>
+                        {SURCHARGE_REASONS.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                        {!SURCHARGE_REASONS.includes(s.reason) && <option value={s.reason}>{s.reason}</option>}
+                      </select>
+                      <input type="number" value={s.amount} onChange={(e) => editSurchargeLocal(i, { amount: Number(e.target.value) })} style={{ ...styles.input, width: 80 }} />
+                      <span style={styles.mutedSmall}>{fmtDateTime(s.at)}</span>
+                      <button onClick={() => removeSurchargeLocal(i)} style={styles.iconBtn}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
-              <input type="number" value={scAmount} onChange={(e) => setScAmount(e.target.value)} placeholder="Сума" style={{ ...styles.input, width: 80 }} />
-              <button onClick={addSurcharge} disabled={scSaving || !(Number(scAmount) > 0)} style={styles.addSurchargeBtn}>
+              <div style={styles.surchargeForm}>
+                <select value={scReason} onChange={(e) => setScReason(e.target.value)} style={styles.select}>
+                  {SURCHARGE_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                {scReason === "Інше" && (
+                  <input value={scCustom} onChange={(e) => setScCustom(e.target.value)} placeholder="Опис причини" style={{ ...styles.input, width: 140 }} />
+                )}
+                <input type="number" value={scAmount} onChange={(e) => setScAmount(e.target.value)} placeholder="Сума" style={{ ...styles.input, width: 80 }} />
+              <button onClick={addSurchargeLocal} disabled={!(Number(scAmount) > 0)} style={styles.addSurchargeBtn}>
                 <Plus size={13} /> Додати
               </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <button onClick={() => setShowHistory((s) => !s)} style={styles.historyToggle}>
             <History size={13} /> Історія правок ({allHistory.length})
@@ -223,7 +257,7 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
               {allHistory.length === 0 && <div style={styles.mutedSmall}>Ще нема правок</div>}
               {allHistory.map((e, i) => (
                 <div key={i} style={styles.historyItem}>
-                  {fmtDateTime(e.at)} — Пасажир {e.passengerIndex}, {e.field === "tariff" ? "тариф" : e.field === "price" ? "ціна" : "знижка"}:{" "}
+                  {fmtDateTime(e.at)} — {e.field === "status" ? "Статус оплати" : `Пасажир ${e.passengerIndex}`}, {e.field === "tariff" ? "тариф" : e.field === "price" ? "ціна" : e.field === "status" ? "" : "знижка"}:{" "}
                   {String(e.oldValue)} → {String(e.newValue)}
                 </div>
               ))}
@@ -309,7 +343,10 @@ const styles: Record<string, React.CSSProperties> = {
   saveBtn: { background: "var(--amber)", border: "none", borderRadius: "var(--radius)", padding: "9px 18px", fontSize: 12.5, fontWeight: 600, color: "#1a1305" },
   hint: { fontSize: 11, color: "var(--text-faint)", marginTop: 6 },
   error: { fontSize: 12, color: "var(--danger)", marginTop: 6 },
-  surchargeBlock: { marginTop: 16, padding: 12, background: "var(--surface-raised)", borderRadius: "var(--radius)", border: "1px dashed var(--hairline-strong)" },
+  surchargeBlock: { marginTop: 12, padding: 12, background: "var(--surface-raised)", borderRadius: "var(--radius)", border: "1px dashed var(--hairline-strong)" },
+  paidToggle: { display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", cursor: "pointer", marginTop: 14, padding: 0 },
+  surchargeEditRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 },
+  iconBtn: { background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: 2, display: "flex" },
   surchargeTitle: { fontSize: 12.5, fontWeight: 700, marginBottom: 4 },
   surchargeHint: { fontSize: 11, color: "var(--text-faint)", marginBottom: 10, lineHeight: 1.4 },
   surchargeList: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 },
