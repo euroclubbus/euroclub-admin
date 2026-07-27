@@ -29,7 +29,10 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
 function OrderRow({ order }: { order: OrderRegistryDoc }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [draft, setDraft] = useState<OrderRegistryPassenger[]>(normalizePassengers(order.passengers));
+  // Патчі, а не повна копія масиву — так редагування одного пасажира ніколи не "заморожує"
+  // застарілий стан інших. Незачеплені пасажири завжди читаються напряму з order.passengers
+  // (живі, onSnapshot), тільки реально відредаговані поля лежать тут до збереження.
+  const [patches, setPatches] = useState<Record<number, Partial<OrderRegistryPassenger>>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -56,50 +59,55 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
     }
   }
 
-  useEffect(() => {
-    if (!open) setDraft(normalizePassengers(order.passengers));
-  }, [order.passengers, open]);
+  const baseline = normalizePassengers(order.passengers);
+  const draft = baseline.map((p) => ({ ...p, ...(patches[p.index] || {}) }));
+  const dirty = Object.keys(patches).length > 0;
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(normalizePassengers(order.passengers));
+  // Скидаємо патчі, коли картку закривають — наступного відкриття завжди з чистого аркуша
+  // і актуальних даних, а не з того, що могло лишитись від минулого разу.
+  useEffect(() => {
+    if (!open) setPatches({});
+  }, [open]);
+
+  function patchPassenger(idx: number, patch: Partial<OrderRegistryPassenger>) {
+    setPatches((prev) => ({ ...prev, [idx]: { ...(prev[idx] || {}), ...patch } }));
+  }
 
   function onDiscountChange(idx: number, name: string) {
     const item = DISCOUNT_CATALOG.find((c) => c.name === name);
     if (!item) return;
-    setDraft((d) =>
-      d.map((p) =>
-        p.index === idx
-          ? { ...p, discountName: item.name, discountPercent: item.percent, price: Math.round(p.tariff * (1 - item.percent / 100)) }
-          : p
-      )
-    );
+    const current = draft.find((p) => p.index === idx);
+    if (!current) return;
+    patchPassenger(idx, { discountName: item.name, discountPercent: item.percent, price: Math.round(current.tariff * (1 - item.percent / 100)) });
   }
 
   function onTariffChange(idx: number, tariff: number) {
-    setDraft((d) =>
-      d.map((p) => (p.index === idx ? { ...p, tariff, price: Math.round(tariff * (1 - p.discountPercent / 100)) } : p))
-    );
+    const current = draft.find((p) => p.index === idx);
+    if (!current) return;
+    // Тариф міняється — знижку не чіпаємо, лише перераховуємо ціну від нового тарифу.
+    patchPassenger(idx, { tariff, price: Math.round(tariff * (1 - current.discountPercent / 100)) });
   }
 
   function onPriceChange(idx: number, price: number) {
-    setDraft((d) => d.map((p) => (p.index === idx ? { ...p, price } : p)));
+    patchPassenger(idx, { price });
   }
 
   async function saveChanges() {
     setSaving(true);
     setError("");
     try {
-      const normalizedBefore = normalizePassengers(order.passengers);
       const edits: OrderRegistryEdit[] = [];
       const now = new Date().toISOString();
       draft.forEach((p) => {
-        const before = normalizedBefore.find((x) => x.index === p.index);
+        const before = baseline.find((x) => x.index === p.index);
         if (!before) return;
         if (before.tariff !== p.tariff) edits.push({ at: now, passengerIndex: p.index, field: "tariff", oldValue: before.tariff, newValue: p.tariff });
         if (before.discountName !== p.discountName) edits.push({ at: now, passengerIndex: p.index, field: "discount", oldValue: before.discountName, newValue: p.discountName });
         if (before.price !== p.price) edits.push({ at: now, passengerIndex: p.index, field: "price", oldValue: before.price, newValue: p.price });
       });
       const ref = doc(db, "order_registry", order.orderNo);
-      await updateDoc(ref, { passengers: normalizePassengers(draft), editHistory: [...(order.editHistory || []), ...edits] });
+      await updateDoc(ref, { passengers: draft, editHistory: [...(order.editHistory || []), ...edits] });
+      setPatches({});
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
