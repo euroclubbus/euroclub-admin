@@ -150,6 +150,12 @@ export interface OrderRegistryEdit {
   newValue: string | number;
 }
 
+export interface OrderSurcharge {
+  amount: number;
+  reason: string; // "Зміна дати" | "Зміна місця відправлення" | "Зміна пасажира" | довільний текст
+  at: string; // ISO
+}
+
 export interface OrderRegistryDoc {
   orderNo: string; // = id документа
   fromCity: string;
@@ -160,6 +166,7 @@ export interface OrderRegistryDoc {
   createdAt: string; // ISO
   passengers: OrderRegistryPassenger[];
   editHistory: OrderRegistryEdit[];
+  surcharges?: OrderSurcharge[];
 }
 
 export interface FleetAmenities {

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
-import { Check, ChevronDown, ChevronRight, History, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, History, Plus, Search } from "lucide-react";
 import { db } from "../lib/firebase";
-import { DISCOUNT_CATALOG, OrderRegistryDoc, OrderRegistryEdit, OrderRegistryPassenger } from "../lib/types";
+import { DISCOUNT_CATALOG, OrderRegistryDoc, OrderRegistryEdit, OrderRegistryPassenger, OrderSurcharge } from "../lib/types";
+
+const SURCHARGE_REASONS = ["Зміна дати", "Зміна місця відправлення", "Зміна пасажира", "Інше"];
 
 function fmtDateTime(iso: string) {
   if (!iso) return "";
@@ -31,6 +33,28 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [scAmount, setScAmount] = useState("");
+  const [scReason, setScReason] = useState(SURCHARGE_REASONS[0]);
+  const [scCustom, setScCustom] = useState("");
+  const [scSaving, setScSaving] = useState(false);
+
+  async function addSurcharge() {
+    const amount = Number(scAmount);
+    if (!(amount > 0)) return;
+    const reason = scReason === "Інше" ? (scCustom.trim() || "Інше") : scReason;
+    setScSaving(true);
+    try {
+      const ref = doc(db, "order_registry", order.orderNo);
+      const entry: OrderSurcharge = { amount, reason, at: new Date().toISOString() };
+      await updateDoc(ref, { surcharges: [...(order.surcharges || []), entry] });
+      setScAmount("");
+      setScCustom("");
+    } catch (e: any) {
+      setError(e?.message || "Не вдалося додати доплату");
+    } finally {
+      setScSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) setDraft(normalizePassengers(order.passengers));
@@ -151,6 +175,38 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
           <div style={styles.hint}>Після збереження застосунок покаже нову суму одразу при оновленні сторінки замовлення.</div>
           {error && <div style={styles.error}>Помилка збереження: {error}</div>}
 
+          <div style={styles.surchargeBlock}>
+            <div style={styles.surchargeTitle}>Доплата (причина завжди вказується тут)</div>
+            <div style={styles.surchargeHint}>
+              Суму доплати застосунок бере: для замовлень в один бік — живою з бекенду (needpay), для замовлень в
+              два боки — з різниці нашої ціни й оплаченого. Тут вказуєш тільки ПРИЧИНУ — вона показується
+              користувачу поруч із сумою доплати.
+            </div>
+            {(order.surcharges || []).length > 0 && (
+              <div style={styles.surchargeList}>
+                {(order.surcharges || []).map((s, i) => (
+                  <div key={i} style={styles.surchargeItem}>
+                    {fmtDateTime(s.at)} — {s.reason}: <strong>{s.amount} ₴</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={styles.surchargeForm}>
+              <select value={scReason} onChange={(e) => setScReason(e.target.value)} style={styles.select}>
+                {SURCHARGE_REASONS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+              {scReason === "Інше" && (
+                <input value={scCustom} onChange={(e) => setScCustom(e.target.value)} placeholder="Опис причини" style={{ ...styles.input, width: 140 }} />
+              )}
+              <input type="number" value={scAmount} onChange={(e) => setScAmount(e.target.value)} placeholder="Сума" style={{ ...styles.input, width: 80 }} />
+              <button onClick={addSurcharge} disabled={scSaving || !(Number(scAmount) > 0)} style={styles.addSurchargeBtn}>
+                <Plus size={13} /> Додати
+              </button>
+            </div>
+          </div>
+
           <button onClick={() => setShowHistory((s) => !s)} style={styles.historyToggle}>
             <History size={13} /> Історія правок ({allHistory.length})
           </button>
@@ -245,6 +301,13 @@ const styles: Record<string, React.CSSProperties> = {
   saveBtn: { background: "var(--amber)", border: "none", borderRadius: "var(--radius)", padding: "9px 18px", fontSize: 12.5, fontWeight: 600, color: "#1a1305" },
   hint: { fontSize: 11, color: "var(--text-faint)", marginTop: 6 },
   error: { fontSize: 12, color: "var(--danger)", marginTop: 6 },
+  surchargeBlock: { marginTop: 16, padding: 12, background: "var(--surface-raised)", borderRadius: "var(--radius)", border: "1px dashed var(--hairline-strong)" },
+  surchargeTitle: { fontSize: 12.5, fontWeight: 700, marginBottom: 4 },
+  surchargeHint: { fontSize: 11, color: "var(--text-faint)", marginBottom: 10, lineHeight: 1.4 },
+  surchargeList: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 },
+  surchargeItem: { fontSize: 12, color: "var(--text)" },
+  surchargeForm: { display: "flex", gap: 8, flexWrap: "wrap" },
+  addSurchargeBtn: { display: "inline-flex", alignItems: "center", gap: 4, background: "var(--amber)", border: "none", borderRadius: "var(--radius)", padding: "7px 12px", fontSize: 12, fontWeight: 600, color: "#1a1305" },
   historyToggle: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, marginTop: 14, cursor: "pointer", padding: 0 },
   historyList: { marginTop: 8, display: "flex", flexDirection: "column", gap: 4 },
   historyItem: { fontSize: 11.5, color: "var(--text-faint)" },
