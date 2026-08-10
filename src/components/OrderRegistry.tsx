@@ -162,8 +162,8 @@ function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrder
             <span style={styles.rowStatValue}>{appOrdersCount ?? "—"}</span>
             <span style={styles.rowStatLabel}>з додатку</span>
           </div>
-          <div style={styles.rowStat} title="Загальна кількість замовлень користувача (всі канали) — бекенд поки не дає адмін-метод для перевірки за email, лише для самого юзера через його сесію">
-            <span style={styles.rowStatValue}>—</span>
+          <div style={styles.rowStat} title="Повна історія замовлень цього юзера (всі канали) — зафіксована застосунком у момент цього бронювання, поки була жива сесія юзера">
+            <span style={styles.rowStatValue}>{order.totalOrdersCount ?? "—"}</span>
             <span style={styles.rowStatLabel}>всього</span>
           </div>
         </div>
