@@ -36,7 +36,7 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
   });
 }
 
-function OrderRow({ order }: { order: OrderRegistryDoc }) {
+function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrdersCount: number | null }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Патчі, а не повна копія масиву — так редагування одного пасажира ніколи не "заморожує"
@@ -155,6 +155,16 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
           <div style={styles.rowMeta}>
             {order.fromCity} → {order.toCity} · {order.tripDate}
             {order.roundTrip && order.tripDate2 ? ` · назад ${order.tripDate2}` : ""} · {order.passengers?.length ?? 0} пас.
+          </div>
+        </div>
+        <div style={styles.rowStats}>
+          <div style={styles.rowStat} title="Скільки замовлень цього email є в реєстрі застосунку (order_registry)">
+            <span style={styles.rowStatValue}>{appOrdersCount ?? "—"}</span>
+            <span style={styles.rowStatLabel}>з додатку</span>
+          </div>
+          <div style={styles.rowStat} title="Загальна кількість замовлень користувача (всі канали) — бекенд поки не дає адмін-метод для перевірки за email, лише для самого юзера через його сесію">
+            <span style={styles.rowStatValue}>—</span>
+            <span style={styles.rowStatLabel}>всього</span>
           </div>
         </div>
         <div style={styles.createdAt}>{fmtDateTime(order.createdAt)}</div>
@@ -385,6 +395,18 @@ export function OrderRegistry() {
     return sortOrders(base, sortKey);
   }, [orders, search, sortKey, statusFilter, dateFrom, dateTo]);
 
+  // Лічильник "скільки замовлень цього email через застосунок" — рахуємо по ВСІХ
+  // завантажених замовленнях (не тільки відфільтрованих), щоб цифра не мінялась залежно
+  // від активного фільтра/пошуку.
+  const emailCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const o of orders) {
+      if (!o.userEmail) continue;
+      map[o.userEmail] = (map[o.userEmail] || 0) + 1;
+    }
+    return map;
+  }, [orders]);
+
   return (
     <div>
       <header style={{ marginBottom: 20 }}>
@@ -437,7 +459,7 @@ export function OrderRegistry() {
 
       <div style={styles.list}>
         {filtered.map((o) => (
-          <OrderRow key={o.orderNo} order={o} />
+          <OrderRow key={o.orderNo} order={o} appOrdersCount={o.userEmail ? emailCounts[o.userEmail] ?? null : null} />
         ))}
       </div>
     </div>
@@ -457,6 +479,10 @@ const styles: Record<string, React.CSSProperties> = {
   dateFilter: { display: "flex", alignItems: "center", gap: 6 },
   dateFilterLabel: { fontSize: 12, color: "var(--text-faint)" },
   dateInput: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)" },
+  rowStats: { display: "flex", gap: 14, flexShrink: 0 },
+  rowStat: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 46 },
+  rowStatValue: { fontSize: 13, fontWeight: 700, color: "var(--text)" },
+  rowStatLabel: { fontSize: 9.5, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.02em" },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
