@@ -299,10 +299,46 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
   );
 }
 
+type SortKey = "createdDesc" | "createdAsc" | "tripDate" | "status" | "orderNo";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "createdDesc", label: "Дата створення (нові спершу)" },
+  { key: "createdAsc", label: "Дата створення (старі спершу)" },
+  { key: "tripDate", label: "Дата поїздки (найближчі спершу)" },
+  { key: "status", label: "Статус оплати" },
+  { key: "orderNo", label: "Номер замовлення" },
+];
+
+// Порядок для сортування за статусом — від "потребує уваги" до "завершено".
+const STATUS_ORDER: Record<string, number> = { "не сплачено": 0, "ще невідомо": 1, "оплачено (попереду)": 2, "оплачено (завершено)": 3, "скасовано": 4 };
+
+function statusSortValue(o: OrderRegistryDoc): number {
+  const label = backendStatusLabel(o.backendStatus).text;
+  return STATUS_ORDER[label] ?? 5;
+}
+
+function sortOrders(list: OrderRegistryDoc[], key: SortKey): OrderRegistryDoc[] {
+  const arr = [...list];
+  switch (key) {
+    case "createdAsc":
+      return arr.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    case "tripDate":
+      return arr.sort((a, b) => (a.tripDate || "").localeCompare(b.tripDate || ""));
+    case "status":
+      return arr.sort((a, b) => statusSortValue(a) - statusSortValue(b));
+    case "orderNo":
+      return arr.sort((a, b) => a.orderNo.localeCompare(b.orderNo));
+    case "createdDesc":
+    default:
+      return arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+}
+
 export function OrderRegistry() {
   const [orders, setOrders] = useState<OrderRegistryDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("createdDesc");
 
   useEffect(() => {
     const q = query(collection(db, "order_registry"), orderBy("createdAt", "desc"));
@@ -319,9 +355,9 @@ export function OrderRegistry() {
 
   const filtered = useMemo(() => {
     const s = search.trim();
-    if (!s) return orders;
-    return orders.filter((o) => o.orderNo.includes(s));
-  }, [orders, search]);
+    const base = s ? orders.filter((o) => o.orderNo.includes(s)) : orders;
+    return sortOrders(base, sortKey);
+  }, [orders, search, sortKey]);
 
   return (
     <div>
@@ -333,9 +369,16 @@ export function OrderRegistry() {
         </p>
       </header>
 
-      <div style={styles.searchBar}>
-        <Search size={15} color="var(--text-faint)" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук за номером замовлення…" style={styles.searchInput} />
+      <div style={styles.toolbar}>
+        <div style={styles.searchBar}>
+          <Search size={15} color="var(--text-faint)" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Пошук за номером замовлення…" style={styles.searchInput} />
+        </div>
+        <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} style={styles.sortSelect}>
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
       {loading && <div style={styles.empty}>Завантаження…</div>}
@@ -353,7 +396,9 @@ export function OrderRegistry() {
 const styles: Record<string, React.CSSProperties> = {
   title: { fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 },
   subtitle: { color: "var(--text-muted)", fontSize: 13, marginTop: 6, maxWidth: 560 },
-  searchBar: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "10px 14px", marginBottom: 16 },
+  searchBar: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "10px 14px", flex: 1 },
+  toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16 },
+  sortSelect: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "10px 12px", fontSize: 12.5, color: "var(--text)", flexShrink: 0 },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
