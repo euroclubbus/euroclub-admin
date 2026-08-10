@@ -51,6 +51,33 @@ function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrder
   const [scAmount, setScAmount] = useState("");
   const [scReason, setScReason] = useState(SURCHARGE_REASONS[0]);
   const [scCustom, setScCustom] = useState("");
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifBody, setNotifBody] = useState("");
+  const [notifSending, setNotifSending] = useState(false);
+  const [notifResult, setNotifResult] = useState<"sent" | "failed" | null>(null);
+
+  const sendNotification = async () => {
+    if (!order.userId || !notifTitle.trim() || !notifBody.trim()) return;
+    setNotifSending(true);
+    setNotifResult(null);
+    try {
+      const res = await fetch("/api/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: notifTitle.trim(), body: notifBody.trim(), userIds: [order.userId] }),
+      });
+      const data = await res.json();
+      setNotifResult(data.successCount > 0 ? "sent" : "failed");
+      if (data.successCount > 0) {
+        setNotifTitle("");
+        setNotifBody("");
+      }
+    } catch {
+      setNotifResult("failed");
+    } finally {
+      setNotifSending(false);
+    }
+  };
 
   const paid = paidPatch !== null ? paidPatch : !!order.paid;
   const surcharges = surchargesPatch !== null ? surchargesPatch : order.surcharges || [];
@@ -172,6 +199,30 @@ function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrder
 
       {open && (
         <div style={styles.detail}>
+          <div style={styles.notifyBox}>
+            {order.userId ? (
+              <>
+                <div style={styles.notifyLabel}>Надіслати сповіщення цьому пасажиру</div>
+                <input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Тема" style={styles.notifyInput} />
+                <textarea value={notifBody} onChange={(e) => setNotifBody(e.target.value)} placeholder="Текст повідомлення" rows={2} style={styles.notifyTextarea} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button
+                    onClick={sendNotification}
+                    disabled={notifSending || !notifTitle.trim() || !notifBody.trim()}
+                    style={{ ...styles.notifySendBtn, opacity: notifSending || !notifTitle.trim() || !notifBody.trim() ? 0.5 : 1 }}
+                  >
+                    {notifSending ? "Надсилаю…" : "Надіслати"}
+                  </button>
+                  {notifResult === "sent" && <span style={{ color: "var(--success, #4CAF50)", fontSize: 12 }}>Надіслано ✓</span>}
+                  {notifResult === "failed" && <span style={{ color: "var(--danger)", fontSize: 12 }}>Не вдалось надіслати (нема активного токена пристрою?)</span>}
+                </div>
+              </>
+            ) : (
+              <div style={styles.notifyLabel}>
+                Сповіщення недоступне — це замовлення зроблене без збереженого userId (старий запис до 10.08 або гостьове бронювання).
+              </div>
+            )}
+          </div>
           <table style={styles.table}>
             <thead>
               <tr>
@@ -485,6 +536,11 @@ const styles: Record<string, React.CSSProperties> = {
   rowStat: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 46 },
   rowStatValue: { fontSize: 13, fontWeight: 700, color: "var(--text)" },
   rowStatLabel: { fontSize: 9.5, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.02em" },
+  notifyBox: { background: "var(--surface-2, var(--surface))", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: 12, marginBottom: 14, display: "flex", flexDirection: "column", gap: 8 },
+  notifyLabel: { fontSize: 12, color: "var(--text-faint)", fontWeight: 600 },
+  notifyInput: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "8px 10px", fontSize: 13, color: "var(--text)" },
+  notifyTextarea: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "8px 10px", fontSize: 13, color: "var(--text)", resize: "vertical", fontFamily: "inherit" },
+  notifySendBtn: { background: "var(--amber)", color: "#1a1305", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
