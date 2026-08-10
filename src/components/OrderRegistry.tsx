@@ -300,6 +300,7 @@ function OrderRow({ order }: { order: OrderRegistryDoc }) {
 }
 
 type SortKey = "createdDesc" | "createdAsc" | "tripDate" | "status" | "orderNo";
+type StatusFilter = "all" | "paid" | "unpaid" | "cancelled";
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "createdDesc", label: "Дата створення (нові спершу)" },
@@ -309,12 +310,30 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "orderNo", label: "Номер замовлення" },
 ];
 
+const STATUS_FILTER_OPTIONS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "Усі" },
+  { key: "paid", label: "Оплачені" },
+  { key: "unpaid", label: "Очікують оплати" },
+  { key: "cancelled", label: "Скасовані" },
+];
+
 // Порядок для сортування за статусом — від "потребує уваги" до "завершено".
 const STATUS_ORDER: Record<string, number> = { "не сплачено": 0, "ще невідомо": 1, "оплачено (попереду)": 2, "оплачено (завершено)": 3, "скасовано": 4 };
 
 function statusSortValue(o: OrderRegistryDoc): number {
   const label = backendStatusLabel(o.backendStatus).text;
   return STATUS_ORDER[label] ?? 5;
+}
+
+// "Оплачені"/"Очікують оплати"/"Скасовані" — за тим самим backendStatus, що вже показуємо
+// в картці (0=скасовано, 1=не сплачено, 2/3=оплачено). Замовлення без backendStatus взагалі
+// (ще не синхронізовані) потрапляють в "Очікують оплати" — найбезпечніший дефолт.
+function matchesStatusFilter(o: OrderRegistryDoc, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  const n = Number(o.backendStatus);
+  if (filter === "cancelled") return n === 0;
+  if (filter === "paid") return n === 2 || n === 3;
+  return !(n === 0 || n === 2 || n === 3); // unpaid — включно з "ще невідомо"
 }
 
 function sortOrders(list: OrderRegistryDoc[], key: SortKey): OrderRegistryDoc[] {
@@ -339,6 +358,10 @@ export function OrderRegistry() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("createdDesc");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // Фільтр за датою ПОЇЗДКИ (tripDate) — від/до, обидва опційні.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     const q = query(collection(db, "order_registry"), orderBy("createdAt", "desc"));
@@ -355,9 +378,12 @@ export function OrderRegistry() {
 
   const filtered = useMemo(() => {
     const s = search.trim();
-    const base = s ? orders.filter((o) => o.orderNo.includes(s)) : orders;
+    let base = s ? orders.filter((o) => o.orderNo.includes(s)) : orders;
+    base = base.filter((o) => matchesStatusFilter(o, statusFilter));
+    if (dateFrom) base = base.filter((o) => (o.tripDate || "") >= dateFrom);
+    if (dateTo) base = base.filter((o) => (o.tripDate || "") <= dateTo);
     return sortOrders(base, sortKey);
-  }, [orders, search, sortKey]);
+  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo]);
 
   return (
     <div>
@@ -381,6 +407,31 @@ export function OrderRegistry() {
         </select>
       </div>
 
+      <div style={styles.filterBar}>
+        <div style={styles.statusChips}>
+          {STATUS_FILTER_OPTIONS.map((o) => (
+            <button
+              key={o.key}
+              onClick={() => setStatusFilter(o.key)}
+              style={{ ...styles.statusChip, ...(statusFilter === o.key ? styles.statusChipActive : {}) }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <div style={styles.dateFilter}>
+          <span style={styles.dateFilterLabel}>Дата поїздки:</span>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={styles.dateInput} />
+          <span style={styles.mutedSmall}>—</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={styles.dateInput} />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={styles.iconBtn}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {loading && <div style={styles.empty}>Завантаження…</div>}
       {!loading && filtered.length === 0 && <div style={styles.empty}>Замовлень не знайдено.</div>}
 
@@ -399,6 +450,13 @@ const styles: Record<string, React.CSSProperties> = {
   searchBar: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "10px 14px", flex: 1 },
   toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16 },
   sortSelect: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "10px 12px", fontSize: 12.5, color: "var(--text)", flexShrink: 0 },
+  filterBar: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 16 },
+  statusChips: { display: "flex", gap: 6, flexWrap: "wrap" },
+  statusChip: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 999, padding: "6px 14px", fontSize: 12, color: "var(--text-muted)", cursor: "pointer" },
+  statusChipActive: { background: "var(--amber)", borderColor: "var(--amber)", color: "#1a1305", fontWeight: 600 },
+  dateFilter: { display: "flex", alignItems: "center", gap: 6 },
+  dateFilterLabel: { fontSize: 12, color: "var(--text-faint)" },
+  dateInput: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)" },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
