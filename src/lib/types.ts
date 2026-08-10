@@ -158,6 +158,7 @@ export interface OrderSurcharge {
 
 export interface OrderRegistryDoc {
   orderNo: string; // = id документа
+  userEmail?: string; // для аналітики — скільки замовлень цього юзера прийшло через застосунок
   fromCity: string;
   toCity: string;
   tripDate: string;
