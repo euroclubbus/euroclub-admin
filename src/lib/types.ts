@@ -160,6 +160,7 @@ export interface OrderRegistryDoc {
   orderNo: string; // = id документа
   userEmail?: string; // для аналітики — скільки замовлень цього юзера прийшло через застосунок
   userId?: string; // = device_tokens/{userId} — для адресної розсилки сповіщення по цьому замовленню
+  route1: string; // = trip.id.split('-')[0] — id рейсу, дозволяє фільтрувати всі замовлення цього маршруту
   totalOrdersCount?: number; // повна історія юзера (всі канали) на момент цього бронювання —
   // забирається застосунком поки жива сесія юзера, окремого адмін-методу для цього нема
   viaApp?: boolean; // true = нативний Android/iOS застосунок, false = PWA/сайт у браузері —
