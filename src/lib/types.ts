@@ -161,6 +161,8 @@ export interface OrderRegistryDoc {
   userEmail?: string; // для аналітики — скільки замовлень цього юзера прийшло через застосунок
   totalOrdersCount?: number; // повна історія юзера (всі канали) на момент цього бронювання —
   // забирається застосунком поки жива сесія юзера, окремого адмін-методу для цього нема
+  viaApp?: boolean; // true = нативний Android/iOS застосунок, false = PWA/сайт у браузері —
+  // Booking.tsx однаковий для обох, тому без цього поля "з додатку" рахувало б і сайт теж
   fromCity: string;
   toCity: string;
   tripDate: string;
