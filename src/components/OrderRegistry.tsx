@@ -158,7 +158,7 @@ function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrder
           </div>
         </div>
         <div style={styles.rowStats}>
-          <div style={styles.rowStat} title="Скільки замовлень цього email є в реєстрі застосунку (order_registry)">
+          <div style={styles.rowStat} title="Скільки замовлень цього email зроблено САМЕ через нативний застосунок (не сайт/PWA) — по order_registry">
             <span style={styles.rowStatValue}>{appOrdersCount ?? "—"}</span>
             <span style={styles.rowStatLabel}>з додатку</span>
           </div>
@@ -395,13 +395,15 @@ export function OrderRegistry() {
     return sortOrders(base, sortKey);
   }, [orders, search, sortKey, statusFilter, dateFrom, dateTo]);
 
-  // Лічильник "скільки замовлень цього email через застосунок" — рахуємо по ВСІХ
-  // завантажених замовленнях (не тільки відфільтрованих), щоб цифра не мінялась залежно
-  // від активного фільтра/пошуку.
+  // Лічильник "скільки замовлень цього email саме ЧЕРЕЗ ЗАСТОСУНОК" (не сайт) — рахуємо
+  // тільки viaApp===true, по ВСІХ завантажених замовленнях (не тільки відфільтрованих),
+  // щоб цифра не мінялась залежно від активного фільтра/пошуку. Замовлення без viaApp
+  // (старі записи, до цього поля) в підрахунок не потрапляють — краще недорахувати, ніж
+  // помилково зарахувати сайт як застосунок.
   const emailCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const o of orders) {
-      if (!o.userEmail) continue;
+      if (!o.userEmail || o.viaApp !== true) continue;
       map[o.userEmail] = (map[o.userEmail] || 0) + 1;
     }
     return map;
