@@ -36,7 +36,7 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
   });
 }
 
-function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrdersCount: number | null }) {
+function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: OrderRegistryDoc; appOrdersCount: number | null; selected: boolean; onToggleSelect: () => void }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Патчі, а не повна копія масиву — так редагування одного пасажира ніколи не "заморожує"
@@ -169,8 +169,18 @@ function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrder
 
   return (
     <div style={styles.row}>
-      <button onClick={() => setOpen((o) => !o)} style={styles.rowHeader}>
-        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+      <div style={styles.rowHeaderWrap}>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          disabled={!order.userId}
+          title={order.userId ? "Обрати для масової розсилки" : "Немає userId — недоступно для розсилки"}
+          style={styles.rowCheckbox}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <button onClick={() => setOpen((o) => !o)} style={styles.rowHeader}>
+          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         <div style={{ flex: 1, textAlign: "left" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={styles.orderNo}>№ {order.orderNo}</span>
@@ -196,6 +206,7 @@ function OrderRow({ order, appOrdersCount }: { order: OrderRegistryDoc; appOrder
         </div>
         <div style={styles.createdAt}>{fmtDateTime(order.createdAt)}</div>
       </button>
+      </div>
 
       {open && (
         <div style={styles.detail}>
@@ -423,6 +434,14 @@ export function OrderRegistry() {
   // Фільтр за датою ПОЇЗДКИ (tripDate) — від/до, обидва опційні.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Фільтр за маршрутом (route1 = id рейсу) — дозволяє знайти всі замовлення одного рейсу
+  // і вибрати їх масово для розсилки.
+  const [routeFilter, setRouteFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [massTitle, setMassTitle] = useState("");
+  const [massBody, setMassBody] = useState("");
+  const [massSending, setMassSending] = useState(false);
+  const [massResult, setMassResult] = useState<{ sent: number; total: number } | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, "order_registry"), orderBy("createdAt", "desc"));
@@ -443,8 +462,10 @@ export function OrderRegistry() {
     base = base.filter((o) => matchesStatusFilter(o, statusFilter));
     if (dateFrom) base = base.filter((o) => (o.tripDate || "") >= dateFrom);
     if (dateTo) base = base.filter((o) => (o.tripDate || "") <= dateTo);
+    const r = routeFilter.trim();
+    if (r) base = base.filter((o) => o.route1 === r);
     return sortOrders(base, sortKey);
-  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo]);
+  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, routeFilter]);
 
   // Лічильник "скільки замовлень цього email саме ЧЕРЕЗ ЗАСТОСУНОК" (не сайт) — рахуємо
   // тільки viaApp===true, по ВСІХ завантажених замовленнях (не тільки відфільтрованих),
@@ -459,6 +480,50 @@ export function OrderRegistry() {
     }
     return map;
   }, [orders]);
+
+  const toggleSelect = (orderNo: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderNo)) next.delete(orderNo);
+      else next.add(orderNo);
+      return next;
+    });
+  };
+
+  // Тільки замовлення з userId реально можна вибрати (без нього нема кому слати) —
+  // фільтруємо це вже на рівні чекбокса (disabled), тут просто збираємо унікальні userId
+  // обраних замовлень (кілька замовлень можуть належати одному юзеру — дублікати прибираємо).
+  const selectedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const o of orders) {
+      if (selectedIds.has(o.orderNo) && o.userId) ids.add(o.userId);
+    }
+    return Array.from(ids);
+  }, [orders, selectedIds]);
+
+  const sendMassNotification = async () => {
+    if (!massTitle.trim() || !massBody.trim() || selectedUserIds.length === 0) return;
+    setMassSending(true);
+    setMassResult(null);
+    try {
+      const res = await fetch("/api/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: massTitle.trim(), body: massBody.trim(), userIds: selectedUserIds }),
+      });
+      const data = await res.json();
+      setMassResult({ sent: data.successCount ?? 0, total: selectedUserIds.length });
+      if (data.successCount > 0) {
+        setMassTitle("");
+        setMassBody("");
+        setSelectedIds(new Set());
+      }
+    } catch {
+      setMassResult({ sent: 0, total: selectedUserIds.length });
+    } finally {
+      setMassSending(false);
+    }
+  };
 
   return (
     <div>
@@ -505,14 +570,57 @@ export function OrderRegistry() {
             </button>
           )}
         </div>
+        <div style={styles.dateFilter}>
+          <span style={styles.dateFilterLabel}>Маршрут (route1):</span>
+          <input
+            value={routeFilter}
+            onChange={(e) => setRouteFilter(e.target.value)}
+            placeholder="напр. 98038"
+            style={{ ...styles.dateInput, width: 110 }}
+          />
+          {routeFilter && (
+            <button onClick={() => setRouteFilter("")} style={styles.iconBtn}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div style={styles.massBox}>
+          <div style={styles.notifyLabel}>Масова розсилка обраним ({selectedIds.size} замовлень, {selectedUserIds.length} унікальних отримувачів)</div>
+          <input value={massTitle} onChange={(e) => setMassTitle(e.target.value)} placeholder="Тема" style={styles.notifyInput} />
+          <textarea value={massBody} onChange={(e) => setMassBody(e.target.value)} placeholder="Текст повідомлення" rows={2} style={styles.notifyTextarea} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={sendMassNotification}
+              disabled={massSending || !massTitle.trim() || !massBody.trim()}
+              style={{ ...styles.notifySendBtn, opacity: massSending || !massTitle.trim() || !massBody.trim() ? 0.5 : 1 }}
+            >
+              {massSending ? "Надсилаю…" : `Надіслати обраним (${selectedUserIds.length})`}
+            </button>
+            <button onClick={() => setSelectedIds(new Set())} style={styles.iconBtn}>Скасувати вибір</button>
+            {massResult && (
+              <span style={{ fontSize: 12, color: massResult.sent > 0 ? "var(--success, #4CAF50)" : "var(--danger)" }}>
+                Доставлено {massResult.sent} з {massResult.total}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {loading && <div style={styles.empty}>Завантаження…</div>}
       {!loading && filtered.length === 0 && <div style={styles.empty}>Замовлень не знайдено.</div>}
 
       <div style={styles.list}>
         {filtered.map((o) => (
-          <OrderRow key={o.orderNo} order={o} appOrdersCount={o.userEmail ? emailCounts[o.userEmail] ?? null : null} />
+          <OrderRow
+            key={o.orderNo}
+            order={o}
+            appOrdersCount={o.userEmail ? emailCounts[o.userEmail] ?? null : null}
+            selected={selectedIds.has(o.orderNo)}
+            onToggleSelect={() => toggleSelect(o.orderNo)}
+          />
         ))}
       </div>
     </div>
@@ -541,11 +649,14 @@ const styles: Record<string, React.CSSProperties> = {
   notifyInput: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "8px 10px", fontSize: 13, color: "var(--text)" },
   notifyTextarea: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "8px 10px", fontSize: 13, color: "var(--text)", resize: "vertical", fontFamily: "inherit" },
   notifySendBtn: { background: "var(--amber)", color: "#1a1305", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  massBox: { background: "var(--surface-2, var(--surface))", border: "1px solid var(--amber)", borderRadius: "var(--radius)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 },
+  rowHeaderWrap: { display: "flex", alignItems: "center", gap: 4 },
+  rowCheckbox: { width: 16, height: 16, flexShrink: 0, marginLeft: 4, cursor: "pointer" },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
   row: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", overflow: "hidden" },
-  rowHeader: { width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", color: "var(--text)" },
+  rowHeader: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "none", border: "none", cursor: "pointer", color: "var(--text)" },
   orderNo: { fontSize: 13.5, fontWeight: 700 },
   rowMeta: { fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 },
   createdAt: { fontSize: 11, color: "var(--text-faint)", flexShrink: 0 },
