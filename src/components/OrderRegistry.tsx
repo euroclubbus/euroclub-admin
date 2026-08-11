@@ -55,6 +55,26 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
   const [notifBody, setNotifBody] = useState("");
   const [notifSending, setNotifSending] = useState(false);
   const [notifResult, setNotifResult] = useState<"sent" | "failed" | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
+
+  const refreshFromBackend = async () => {
+    setRefreshing(true);
+    setRefreshError("");
+    try {
+      const res = await fetch("/api/refresh-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderNo: order.orderNo }),
+      });
+      const data = await res.json();
+      if (!res.ok) setRefreshError(data.error || "Не вдалося оновити");
+    } catch {
+      setRefreshError("Мережева помилка");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const sendNotification = async () => {
     if (!order.userId || !notifTitle.trim() || !notifBody.trim()) return;
@@ -304,6 +324,14 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
                 </>
               );
             })()}
+            {order.sessionKey ? (
+              <button onClick={refreshFromBackend} disabled={refreshing} style={styles.refreshBtn}>
+                {refreshing ? "Оновлюю…" : "Оновити з бекенду"}
+              </button>
+            ) : (
+              <span style={styles.mutedSmall} title="Немає збереженого токена сесії — старий запис до 10.08 або гостьове бронювання"> · оновлення недоступне</span>
+            )}
+            {refreshError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{refreshError}</div>}
           </div>
 
           {paid && (
@@ -652,6 +680,7 @@ const styles: Record<string, React.CSSProperties> = {
   massBox: { background: "var(--surface-2, var(--surface))", border: "1px solid var(--amber)", borderRadius: "var(--radius)", padding: 14, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 },
   rowHeaderWrap: { display: "flex", alignItems: "center", gap: 4 },
   rowCheckbox: { width: 16, height: 16, flexShrink: 0, marginLeft: 4, cursor: "pointer" },
+  refreshBtn: { marginLeft: 8, background: "none", border: "1px solid var(--hairline)", borderRadius: 6, padding: "3px 10px", fontSize: 11.5, color: "var(--text-muted)", cursor: "pointer" },
   searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--text)", fontSize: 13.5 },
   empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
