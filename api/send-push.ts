@@ -63,6 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const targetCount = targetUserIds.length;
     let successCount = 0;
     let status: "sent" | "partial" | "failed" = "failed";
+    let workerError: string | undefined;
 
     if (targetCount > 0) {
       const workerRes = await fetch(PUSH_WORKER_URL, {
@@ -75,10 +76,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           data: deepLink ? { deepLink: String(deepLink) } : undefined,
         }),
       });
-      const workerData: any = await workerRes.json();
-      const results: any[] = Array.isArray(workerData?.results) ? workerData.results : [];
-      successCount = results.filter((r) => r.success).length;
-      status = successCount === targetCount ? "sent" : successCount > 0 ? "partial" : "failed";
+      const rawText = await workerRes.text();
+      let workerData: any = null;
+      try { workerData = JSON.parse(rawText); } catch { /* нижче обробимо як помилку */ }
+
+      if (!workerRes.ok || !workerData) {
+        // Раніше тут мовчки рахувалось successCount=0 без жодного пояснення — виглядало
+        // так, ніби просто нема токенів, хоча насправді Worker міг повернути 401/500 (напр.
+        // неправильний x-api-key). Тепер точна причина видна одразу.
+        workerError = `Worker відповів ${workerRes.status}: ${rawText.slice(0, 300)}`;
+      } else {
+        const results: any[] = Array.isArray(workerData?.results) ? workerData.results : [];
+        successCount = results.filter((r) => r.success).length;
+        status = successCount === targetCount ? "sent" : successCount > 0 ? "partial" : "failed";
+        if (successCount === 0 && results.length > 0) {
+          // Усі "успішно оброблені", але жоден не success — типово no_device_token або
+          // unknown_platform по кожному, покажемо перший приклад причини.
+          workerError = `Worker обробив запит, але 0 успішних: ${JSON.stringify(results[0])}`;
+        }
+      }
     }
 
     const silent = req.body?.silent === true; // відповіді у Вхідних не засмічують історію розсилок
@@ -95,7 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    res.status(200).json({ targetCount, successCount, status });
+    res.status(200).json({ targetCount, successCount, status, workerError });
   } catch (err) {
     console.error("send-push error:", err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Внутрішня помилка" });
