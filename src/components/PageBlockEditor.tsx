@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
-import { GripVertical, Image as ImageIcon, Loader2, Trash2, Video as VideoIcon } from "lucide-react";
+import { GripVertical, Image as ImageIcon, Loader2, Trash2, Type as TextIcon, Video as VideoIcon } from "lucide-react";
 import { storage } from "../lib/firebase";
 import { PageBlock } from "../lib/types";
 
@@ -75,7 +75,7 @@ export function PageBlockEditor({ block, pageId, onChange, onDelete, dragHandleP
 
       <div style={styles.body}>
         <div style={styles.typeLabel}>
-          {block.type === "image" ? <ImageIcon size={13} /> : block.type === "video" ? <VideoIcon size={13} /> : "T"}
+          {block.type === "image" ? <ImageIcon size={13} /> : block.type === "video" ? <VideoIcon size={13} /> : <TextIcon size={13} />}
           {block.type === "image" ? "Зображення" : block.type === "video" ? "Відео" : "Текст"}
         </div>
 
