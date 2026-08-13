@@ -1,24 +1,24 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import { getMessaging } from "firebase-admin/messaging";
 
-// Service account береться з env-змінної FIREBASE_SERVICE_ACCOUNT (JSON-рядок
-// повністю, як він є у ключі, завантаженому з Firebase Console -> Project
-// Settings -> Service Accounts -> Generate new private key).
-// Ставиться в Vercel: Settings -> Environment Variables.
+// ПЕРЕРОБЛЕНО (13.08, Кеп): раніше ця функція сама читала device_tokens і слала через
+// Firebase Admin SDK (messaging.sendEachForMulticast) — це вміє ТІЛЬКИ Android (FCM),
+// iOS-токени сирі (APNs), Admin SDK їх не приймає. Через це push на iOS взагалі не долітав
+// — ні масові розсилки, ні відповіді у "Вхідні". Той самий Cloudflare Worker
+// (euroclub-push-sender), яким користується сам застосунок для власних потреб, УЖЕ вміє
+// обидві платформи правильно (читає ту саму підколекцію device_tokens/{uid}/devices/*,
+// шле FCM для Android і напряму APNs для iOS). Тепер адмінка НЕ дублює цю логіку —
+// просто передає запит Worker'у. Єдине джерело правди для "як слати push" — Worker,
+// не два окремі місця, які можуть розійтися (як і сталося).
+
+const PUSH_WORKER_URL = "https://euroclub-push-sender.eclubbus21.workers.dev/send";
+
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
-
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT не задано в env-змінних Vercel");
-  }
-  const serviceAccount = JSON.parse(raw);
-
-  return initializeApp({
-    credential: cert(serviceAccount),
-  });
+  if (!raw) throw new Error("FIREBASE_SERVICE_ACCOUNT не задано в env-змінних Vercel");
+  return initializeApp({ credential: cert(JSON.parse(raw)) });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -38,43 +38,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const apiSecret = process.env.PUSH_WORKER_API_SECRET;
+  if (!apiSecret) {
+    res.status(500).json({ error: "PUSH_WORKER_API_SECRET не задано в env-змінних Vercel" });
+    return;
+  }
+
   try {
     const app = getAdminApp();
     const db = getFirestore(app);
-    const messaging = getMessaging(app);
 
-    // userIds не задано (або порожній масив із явним прапорцем all) — розсилка всім,
-    // як і раніше. userIds задано — цільова розсилка лише цим користувачам
-    // (сегмент зі звіту, або відповідь у Вхідних одному конкретному id).
-    let tokens: string[];
+    // userIds не задано (або порожній) — розсилка ВСІМ: Worker вимагає явний список
+    // user_ids (не має режиму "broadcast"), тому тут збираємо id ВСІХ документів
+    // device_tokens (id документа = userId, самі токени Worker дістане сам зі своєї
+    // підколекції /devices/). userIds задано — цільова розсилка (сегмент/Вхідні).
+    let targetUserIds: string[];
     if (Array.isArray(userIds) && userIds.length > 0) {
-      const docs = await Promise.all(userIds.map((uid: string) => db.collection("device_tokens").doc(String(uid)).get()));
-      tokens = docs.map((d) => (d.data() as { token?: string } | undefined)?.token).filter((t): t is string => Boolean(t));
+      targetUserIds = userIds.map(String);
     } else {
-      const tokensSnap = await db.collection("device_tokens").get();
-      tokens = tokensSnap.docs.map((d) => (d.data() as { token?: string }).token).filter((t): t is string => Boolean(t));
+      const snap = await db.collection("device_tokens").listDocuments();
+      targetUserIds = snap.map((d) => d.id);
     }
 
-    const targetCount = tokens.length;
+    const targetCount = targetUserIds.length;
     let successCount = 0;
     let status: "sent" | "partial" | "failed" = "failed";
 
     if (targetCount > 0) {
-      // sendEachForMulticast приймає максимум 500 токенів за раз.
-      const chunks: string[][] = [];
-      for (let i = 0; i < tokens.length; i += 500) {
-        chunks.push(tokens.slice(i, i + 500));
-      }
-
-      for (const chunk of chunks) {
-        const result = await messaging.sendEachForMulticast({
-          tokens: chunk,
-          notification: { title: title.trim(), body: body.trim() },
+      const workerRes = await fetch(PUSH_WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiSecret },
+        body: JSON.stringify({
+          user_ids: targetUserIds,
+          title: title.trim(),
+          body: body.trim(),
           data: deepLink ? { deepLink: String(deepLink) } : undefined,
-        });
-        successCount += result.successCount;
-      }
-
+        }),
+      });
+      const workerData: any = await workerRes.json();
+      const results: any[] = Array.isArray(workerData?.results) ? workerData.results : [];
+      successCount = results.filter((r) => r.success).length;
       status = successCount === targetCount ? "sent" : successCount > 0 ? "partial" : "failed";
     }
 
