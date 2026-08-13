@@ -32,8 +32,8 @@ export function PushForm({ onSent }: { onSent: () => void }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Невідома помилка");
       setResult({
-        ok: true,
-        message: `Надіслано ${data.successCount} з ${data.targetCount} пристроїв.`,
+        ok: data.successCount > 0,
+        message: `Надіслано ${data.successCount} з ${data.targetCount} пристроїв.${data.workerError ? ` (${data.workerError})` : ''}`,
       });
       setTitle("");
       setBody("");
