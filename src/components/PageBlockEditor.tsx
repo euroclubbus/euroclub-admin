@@ -28,11 +28,13 @@ interface Props {
 
 export function PageBlockEditor({ block, pageId, onChange, onDelete, dragHandleProps }: Props) {
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File | null) {
     if (!file) return;
     setUploading(true);
+    setUploadError("");
     try {
       const oldUrl = block.url;
       const path = `pages/${pageId}/${crypto.randomUUID()}-${file.name}`;
@@ -47,6 +49,18 @@ export function PageBlockEditor({ block, pageId, onChange, onDelete, dragHandleP
           /* стара версія файлу може вже не існувати — не критично */
         }
       }
+    } catch (err) {
+      // Раніше помилка тут мовчки проковтувалась — кнопка просто "нічого не робила",
+      // без жодного пояснення (Кеп, 13.08: "фото не завантажується"). Найімовірніша причина
+      // — Firebase Storage security rules не дозволяють запис у шлях pages/ (стара історія:
+      // той самий клас проблеми вже був із Firestore rules для trip_reports).
+      console.error("[PageBlockEditor] upload failed", err);
+      const code = (err as { code?: string })?.code;
+      setUploadError(
+        code === "storage/unauthorized"
+          ? "Немає дозволу на завантаження (перевірити Storage security rules у Firebase Console)"
+          : `Помилка завантаження: ${(err as Error)?.message || "невідома помилка"}`
+      );
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -91,6 +105,7 @@ export function PageBlockEditor({ block, pageId, onChange, onDelete, dragHandleP
               style={{ display: "none" }}
               onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
             />
+            {uploadError && <div style={styles.uploadError}>{uploadError}</div>}
           </div>
         )}
       </div>
@@ -156,6 +171,11 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "7px 12px",
     fontSize: 12.5,
     color: "var(--text)",
+  },
+  uploadError: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "var(--danger, #E53935)",
   },
   deleteBtn: {
     background: "transparent",
