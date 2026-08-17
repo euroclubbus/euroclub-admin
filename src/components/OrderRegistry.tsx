@@ -215,8 +215,8 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
           </div>
         </div>
         <div style={styles.rowStats}>
-          <div style={styles.rowStat} title="Джерело: 1 = Android/PWA (бекенд їх не розрізняє), 2 = iOS — той самий параметр, що йде в кожному запиті на бекенд">
-            <span style={styles.rowStatValue}>{order.appPlatform ? `APP${order.appPlatform}` : "—"}</span>
+          <div style={styles.rowStat} title="Джерело: 1 = Android/PWA (бекенд їх не розрізняє), 2 = iOS. Пріоритет — живе поле з бекенду (синхронізується автоматично, коли юзер відкриває застосунок; працює навіть для старих замовлень), інакше — те, що записав сам застосунок у момент бронювання.">
+            <span style={styles.rowStatValue}>{(order.backendAppPlatform ?? order.appPlatform) ? `APP${order.backendAppPlatform ?? order.appPlatform}` : "—"}</span>
             <span style={styles.rowStatLabel}>джерело</span>
           </div>
           <div style={styles.rowStat} title="Скільки замовлень цього email зроблено САМЕ через нативний застосунок (не сайт/PWA) — по order_registry">
