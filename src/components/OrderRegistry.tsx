@@ -462,6 +462,9 @@ export function OrderRegistry() {
   // Фільтр за датою ПОЇЗДКИ (tripDate) — від/до, обидва опційні.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Фільтр за датою БРОНЮВАННЯ (createdAt, ISO) — від/до, окремо від дати поїздки.
+  const [bookingDateFrom, setBookingDateFrom] = useState("");
+  const [bookingDateTo, setBookingDateTo] = useState("");
   // Фільтр за маршрутом (route1 = id рейсу) — дозволяє знайти всі замовлення одного рейсу
   // і вибрати їх масово для розсилки.
   const [routeFilter, setRouteFilter] = useState("");
@@ -490,10 +493,12 @@ export function OrderRegistry() {
     base = base.filter((o) => matchesStatusFilter(o, statusFilter));
     if (dateFrom) base = base.filter((o) => (o.tripDate || "") >= dateFrom);
     if (dateTo) base = base.filter((o) => (o.tripDate || "") <= dateTo);
+    if (bookingDateFrom) base = base.filter((o) => (o.createdAt || "").slice(0, 10) >= bookingDateFrom);
+    if (bookingDateTo) base = base.filter((o) => (o.createdAt || "").slice(0, 10) <= bookingDateTo);
     const r = routeFilter.trim();
     if (r) base = base.filter((o) => o.route1 === r);
     return sortOrders(base, sortKey);
-  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, routeFilter]);
+  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, bookingDateFrom, bookingDateTo, routeFilter]);
 
   // Лічильник "скільки замовлень цього email саме ЧЕРЕЗ ЗАСТОСУНОК" (не сайт) — рахуємо
   // тільки viaApp===true, по ВСІХ завантажених замовленнях (не тільки відфільтрованих),
@@ -594,6 +599,17 @@ export function OrderRegistry() {
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={styles.dateInput} />
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={styles.iconBtn}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <div style={styles.dateFilter}>
+          <span style={styles.dateFilterLabel}>Дата бронювання:</span>
+          <input type="date" value={bookingDateFrom} onChange={(e) => setBookingDateFrom(e.target.value)} style={styles.dateInput} />
+          <span style={styles.mutedSmall}>—</span>
+          <input type="date" value={bookingDateTo} onChange={(e) => setBookingDateTo(e.target.value)} style={styles.dateInput} />
+          {(bookingDateFrom || bookingDateTo) && (
+            <button onClick={() => { setBookingDateFrom(""); setBookingDateTo(""); }} style={styles.iconBtn}>
               <X size={14} />
             </button>
           )}
