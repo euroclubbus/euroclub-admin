@@ -562,6 +562,20 @@ export function OrderRegistry() {
     }
   };
 
+  // Підсумковий рядок (Кеп, 17.08) — по відфільтрованому списку (не по всіх замовленнях
+  // взагалі), щоб цифри відповідали тому, що зараз реально видно на екрані.
+  const summary = useMemo(() => {
+    let paid = 0, unpaid = 0, cancelled = 0, passengers = 0;
+    for (const o of filtered) {
+      const n = Number(o.backendStatus);
+      if (n === 0) cancelled++;
+      else if (n === 2 || n === 3) paid++;
+      else unpaid++;
+      passengers += o.passengers?.length ?? 0;
+    }
+    return { total: filtered.length, paid, unpaid, cancelled, passengers };
+  }, [filtered]);
+
   return (
     <div>
       <header style={{ marginBottom: 20 }}>
@@ -678,6 +692,20 @@ export function OrderRegistry() {
           />
         ))}
       </div>
+
+      {!loading && filtered.length > 0 && (
+        <div style={styles.summaryBar}>
+          <span><strong>{summary.total}</strong> замовлень</span>
+          <span style={styles.summaryDot}>·</span>
+          <span style={{ color: "var(--success, #4CAF50)" }}>{summary.paid} оплачено</span>
+          <span style={styles.summaryDot}>·</span>
+          <span style={{ color: "var(--amber)" }}>{summary.unpaid} очікує</span>
+          <span style={styles.summaryDot}>·</span>
+          <span style={{ color: "var(--danger, #E53935)" }}>{summary.cancelled} скасовано</span>
+          <span style={styles.summaryDot}>·</span>
+          <span>{summary.passengers} пасажирів</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -696,6 +724,8 @@ const styles: Record<string, React.CSSProperties> = {
   dateFilterLabel: { fontSize: 12, color: "var(--text-faint)" },
   dateInput: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)" },
   dateModeSelect: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)", fontWeight: 600 },
+  summaryBar: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "12px 14px", background: "var(--surface-2, var(--surface))", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", fontSize: 12.5, color: "var(--text-muted)" },
+  summaryDot: { color: "var(--text-faint)" },
   rowStats: { display: "flex", gap: 14, flexShrink: 0 },
   rowStat: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 46 },
   rowStatValue: { fontSize: 13, fontWeight: 700, color: "var(--text)" },
