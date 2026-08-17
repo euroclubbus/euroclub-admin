@@ -709,6 +709,21 @@ export function OrderRegistry() {
         </div>
       )}
 
+      {!loading && filtered.length > 0 && (
+        <div style={{ ...styles.summaryBar, marginTop: 0, marginBottom: 16 }}>
+          <span><strong>{summary.total}</strong> замовлень у списку</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={bulkRefresh} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по сесії юзера">
+            {bulkRefreshing ? "Оновлюю…" : `Оновити ці ${summary.total}`}
+          </button>
+          {bulkResult && (
+            <span style={styles.summaryDot}>
+              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду
+            </span>
+          )}
+        </div>
+      )}
+
       {loading && <div style={styles.empty}>Завантаження…</div>}
       {!loading && filtered.length === 0 && <div style={styles.empty}>Замовлень не знайдено.</div>}
 
