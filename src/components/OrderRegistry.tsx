@@ -39,6 +39,10 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
 function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: OrderRegistryDoc; appOrdersCount: number | null; selected: boolean; onToggleSelect: () => void }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  // Пріоритет — живий userId з бекенду (backendUserId, синхронізується автоматично, тому
+  // ретроактивно заповнюється навіть для старих замовлень), інакше — те, що записав сам
+  // застосунок у момент бронювання (17.08).
+  const effectiveUserId = order.backendUserId ?? order.userId;
   // Патчі, а не повна копія масиву — так редагування одного пасажира ніколи не "заморожує"
   // застарілий стан інших. Незачеплені пасажири завжди читаються напряму з order.passengers
   // (живі, onSnapshot), тільки реально відредаговані поля лежать тут до збереження.
@@ -77,14 +81,14 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
   };
 
   const sendNotification = async () => {
-    if (!order.userId || !notifTitle.trim() || !notifBody.trim()) return;
+    if (!effectiveUserId || !notifTitle.trim() || !notifBody.trim()) return;
     setNotifSending(true);
     setNotifResult(null);
     try {
       const res = await fetch("/api/send-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: notifTitle.trim(), body: notifBody.trim(), userIds: [order.userId] }),
+        body: JSON.stringify({ title: notifTitle.trim(), body: notifBody.trim(), userIds: [effectiveUserId] }),
       });
       const data = await res.json();
       setNotifResult(data.successCount > 0 ? "sent" : "failed");
@@ -194,8 +198,8 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
           type="checkbox"
           checked={selected}
           onChange={onToggleSelect}
-          disabled={!order.userId}
-          title={order.userId ? "Обрати для масової розсилки" : "Немає userId — недоступно для розсилки"}
+          disabled={!effectiveUserId}
+          title={effectiveUserId ? "Обрати для масової розсилки" : "Немає userId — недоступно для розсилки"}
           style={styles.rowCheckbox}
           onClick={(e) => e.stopPropagation()}
         />
@@ -235,7 +239,7 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
       {open && (
         <div style={styles.detail}>
           <div style={styles.notifyBox}>
-            {order.userId ? (
+            {effectiveUserId ? (
               <>
                 <div style={styles.notifyLabel}>Надіслати сповіщення цьому пасажиру</div>
                 <input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Тема" style={styles.notifyInput} />
@@ -254,7 +258,7 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
               </>
             ) : (
               <div style={styles.notifyLabel}>
-                Сповіщення недоступне — це замовлення зроблене без збереженого userId (старий запис до 10.08 або гостьове бронювання).
+                Сповіщення недоступне — userId ще не синхронізовано для цього замовлення (це станеться автоматично, щойно цей юзер відкриє застосунок).
               </div>
             )}
           </div>
@@ -333,7 +337,7 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
                 {refreshing ? "Оновлюю…" : "Оновити з бекенду"}
               </button>
             ) : (
-              <span style={styles.mutedSmall} title="Немає збереженого токена сесії — старий запис до 10.08 або гостьове бронювання"> · оновлення недоступне</span>
+              <span style={styles.mutedSmall} title="Немає збереженого токена сесії — це замовлення зроблене до 10.08, коли sessionKey ще не записувався. На відміну від userId/app, sessionKey неможливо отримати заднім числом — це реальний токен сесії, а не поле з відповіді бекенду."> · оновлення недоступне</span>
             )}
             {refreshError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{refreshError}</div>}
           </div>
