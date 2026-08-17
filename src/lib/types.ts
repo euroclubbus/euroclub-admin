@@ -160,6 +160,7 @@ export interface OrderRegistryDoc {
   orderNo: string; // = id документа
   userEmail?: string; // для аналітики — скільки замовлень цього юзера прийшло через застосунок
   userId?: string; // = device_tokens/{userId} — для адресної розсилки сповіщення по цьому замовленню
+  appPlatform?: "1" | "2"; // те саме, що йде на бекенд у кожному запиті — 1=Android/PWA, 2=iOS
   sessionKey?: string; // = uidkey юзера в момент бронювання — для серверного "Оновити" (api/refresh-order.ts).
   // ВАЖЛИВО: повноцінний токен сесії, використовується ТІЛЬКИ на сервері, ніколи в браузері.
   route1: string; // = trip.id.split('-')[0] — id рейсу, дозволяє фільтрувати всі замовлення цього маршруту
