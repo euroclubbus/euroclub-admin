@@ -465,6 +465,10 @@ export function OrderRegistry() {
   // Фільтр за датою БРОНЮВАННЯ (createdAt, ISO) — від/до, окремо від дати поїздки.
   const [bookingDateFrom, setBookingDateFrom] = useState("");
   const [bookingDateTo, setBookingDateTo] = useState("");
+  // Один блок замість двох поруч (Кеп, 17.08) — перемикач, який з двох фільтрів дат
+  // активний зараз. Значення обох лишаються в стейті незалежно, просто показуємо на екрані
+  // тільки один пара полів за раз.
+  const [dateFilterMode, setDateFilterMode] = useState<"trip" | "booking">("trip");
   // Фільтр за маршрутом (route1 = id рейсу) — дозволяє знайти всі замовлення одного рейсу
   // і вибрати їх масово для розсилки.
   const [routeFilter, setRouteFilter] = useState("");
@@ -593,25 +597,32 @@ export function OrderRegistry() {
           ))}
         </div>
         <div style={styles.dateFilter}>
-          <span style={styles.dateFilterLabel}>Дата поїздки:</span>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={styles.dateInput} />
-          <span style={styles.mutedSmall}>—</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={styles.dateInput} />
-          {(dateFrom || dateTo) && (
-            <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={styles.iconBtn}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <div style={styles.dateFilter}>
-          <span style={styles.dateFilterLabel}>Дата бронювання:</span>
-          <input type="date" value={bookingDateFrom} onChange={(e) => setBookingDateFrom(e.target.value)} style={styles.dateInput} />
-          <span style={styles.mutedSmall}>—</span>
-          <input type="date" value={bookingDateTo} onChange={(e) => setBookingDateTo(e.target.value)} style={styles.dateInput} />
-          {(bookingDateFrom || bookingDateTo) && (
-            <button onClick={() => { setBookingDateFrom(""); setBookingDateTo(""); }} style={styles.iconBtn}>
-              <X size={14} />
-            </button>
+          <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value as "trip" | "booking")} style={styles.dateModeSelect}>
+            <option value="trip">Дата поїздки</option>
+            <option value="booking">Дата бронювання</option>
+          </select>
+          {dateFilterMode === "trip" ? (
+            <>
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={styles.dateInput} />
+              <span style={styles.mutedSmall}>—</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={styles.dateInput} />
+              {(dateFrom || dateTo) && (
+                <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={styles.iconBtn}>
+                  <X size={14} />
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <input type="date" value={bookingDateFrom} onChange={(e) => setBookingDateFrom(e.target.value)} style={styles.dateInput} />
+              <span style={styles.mutedSmall}>—</span>
+              <input type="date" value={bookingDateTo} onChange={(e) => setBookingDateTo(e.target.value)} style={styles.dateInput} />
+              {(bookingDateFrom || bookingDateTo) && (
+                <button onClick={() => { setBookingDateFrom(""); setBookingDateTo(""); }} style={styles.iconBtn}>
+                  <X size={14} />
+                </button>
+              )}
+            </>
           )}
         </div>
         <div style={styles.dateFilter}>
@@ -684,6 +695,7 @@ const styles: Record<string, React.CSSProperties> = {
   dateFilter: { display: "flex", alignItems: "center", gap: 6 },
   dateFilterLabel: { fontSize: 12, color: "var(--text-faint)" },
   dateInput: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)" },
+  dateModeSelect: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)", fontWeight: 600 },
   rowStats: { display: "flex", gap: 14, flexShrink: 0 },
   rowStat: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 46 },
   rowStatValue: { fontSize: 13, fontWeight: 700, color: "var(--text)" },
