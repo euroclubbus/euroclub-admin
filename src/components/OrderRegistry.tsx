@@ -584,6 +584,29 @@ export function OrderRegistry() {
     return { total: filtered.length, paid, unpaid, cancelled, passengers };
   }, [filtered]);
 
+  // Масове "Оновити" (Кеп, 17.08) — ТІЛЬКИ для поточного відфільтрованого списку (звузь
+  // фільтрами дату/маршрут/статус спершу), не для всього реєстру одразу — щоб контролювати
+  // навантаження на бекенд самому, а не автоматично.
+  const [bulkRefreshing, setBulkRefreshing] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ backendCallsMade: number; updated: number } | null>(null);
+  const bulkRefresh = async () => {
+    setBulkRefreshing(true);
+    setBulkResult(null);
+    try {
+      const res = await fetch("/api/bulk-refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderNos: filtered.map((o) => o.orderNo) }),
+      });
+      const data = await res.json();
+      if (res.ok) setBulkResult({ backendCallsMade: data.backendCallsMade, updated: data.updated });
+    } catch {
+      /* мовчки — кнопка просто лишиться доступною для повтору */
+    } finally {
+      setBulkRefreshing(false);
+    }
+  };
+
   return (
     <div>
       <header style={{ marginBottom: 20 }}>
@@ -712,6 +735,15 @@ export function OrderRegistry() {
           <span style={{ color: "var(--danger, #E53935)" }}>{summary.cancelled} скасовано</span>
           <span style={styles.summaryDot}>·</span>
           <span>{summary.passengers} пасажирів</span>
+          <span style={{ flex: 1 }} />
+          <button onClick={bulkRefresh} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по сесії юзера">
+            {bulkRefreshing ? "Оновлюю…" : `Оновити ці ${summary.total}`}
+          </button>
+          {bulkResult && (
+            <span style={styles.summaryDot}>
+              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -734,6 +766,7 @@ const styles: Record<string, React.CSSProperties> = {
   dateModeSelect: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "6px 8px", fontSize: 12, color: "var(--text)", fontWeight: 600 },
   summaryBar: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 16, padding: "12px 14px", background: "var(--surface-2, var(--surface))", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", fontSize: 12.5, color: "var(--text-muted)" },
   summaryDot: { color: "var(--text-faint)" },
+  bulkRefreshBtn: { background: "var(--amber)", color: "#1a1305", border: "none", borderRadius: 6, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   rowStats: { display: "flex", gap: 14, flexShrink: 0 },
   rowStat: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 46 },
   rowStatValue: { fontSize: 13, fontWeight: 700, color: "var(--text)" },
