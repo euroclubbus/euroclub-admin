@@ -588,7 +588,7 @@ export function OrderRegistry() {
   // фільтрами дату/маршрут/статус спершу), не для всього реєстру одразу — щоб контролювати
   // навантаження на бекенд самому, а не автоматично.
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
-  const [bulkResult, setBulkResult] = useState<{ backendCallsMade: number; updated: number } | null>(null);
+  const [bulkResult, setBulkResult] = useState<{ backendCallsMade: number; updated: number; skippedNoSessionKey: number; notFoundInBackend: number } | null>(null);
   const bulkRefresh = async () => {
     setBulkRefreshing(true);
     setBulkResult(null);
@@ -599,7 +599,7 @@ export function OrderRegistry() {
         body: JSON.stringify({ orderNos: filtered.map((o) => o.orderNo) }),
       });
       const data = await res.json();
-      if (res.ok) setBulkResult({ backendCallsMade: data.backendCallsMade, updated: data.updated });
+      if (res.ok) setBulkResult({ backendCallsMade: data.backendCallsMade, updated: data.updated, skippedNoSessionKey: data.skippedNoSessionKey ?? 0, notFoundInBackend: data.notFoundInBackend ?? 0 });
     } catch {
       /* мовчки — кнопка просто лишиться доступною для повтору */
     } finally {
@@ -718,7 +718,7 @@ export function OrderRegistry() {
           </button>
           {bulkResult && (
             <span style={styles.summaryDot}>
-              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду
+              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду{bulkResult.skippedNoSessionKey > 0 ? ` · ${bulkResult.skippedNoSessionKey} без sessionKey (старі)` : ''}{bulkResult.notFoundInBackend > 0 ? ` · ${bulkResult.notFoundInBackend} не знайдено на бекенді` : ''}
             </span>
           )}
         </div>
@@ -756,7 +756,7 @@ export function OrderRegistry() {
           </button>
           {bulkResult && (
             <span style={styles.summaryDot}>
-              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду
+              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду{bulkResult.skippedNoSessionKey > 0 ? ` · ${bulkResult.skippedNoSessionKey} без sessionKey (старі)` : ''}{bulkResult.notFoundInBackend > 0 ? ` · ${bulkResult.notFoundInBackend} не знайдено на бекенді` : ''}
             </span>
           )}
         </div>
