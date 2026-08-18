@@ -23,12 +23,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const results: any[] = [];
+
+  // Спроба 3 (нова): src/api/euroclub.ts показав, що є ОКРЕМИЙ шлях /v1/json/{method}/,
+  // де ключ EUROCLUB_KEY підставляє САМ Worker curly-voice-8a71 автоматично — застосунок
+  // взагалі не передає жодного ключа сам. Метод order_confirm приймає hash (=oid) напряму,
+  // без uidkey. Пробуємо БЕЗ жодного ключа з нашого боку — якщо Worker сам підставляє.
+  try {
+    const url = `${WORKER}/v1/json/order_confirm/?hash=${encodeURIComponent(oid)}`;
+    const backendRes = await fetch(url, { cache: "no-store" });
+    const rawText = await backendRes.text();
+    results.push({ label: "order_confirm через curly-voice-8a71 (без ключа з нашого боку)", url, httpStatus: backendRes.status, raw: rawText.slice(0, 2000) });
+  } catch (err) {
+    results.push({ label: "order_confirm через curly-voice-8a71", error: err instanceof Error ? err.message : String(err) });
+  }
+
   const attempts: { label: string; body: Record<string, string> }[] = [
     { label: "order_info + key як uidkey", body: { work: "work", app: "1", lng: "uk", uidkey: API_KEY, mod: "apimobile", opr: "order_info", oid } },
     { label: "user-orders + key як uidkey + oid", body: { work: "work", app: "1", lng: "uk", uidkey: API_KEY, mod: "apimobile", opr: "user-orders", oid } },
   ];
 
-  const results: any[] = [];
   for (const attempt of attempts) {
     try {
       const backendRes = await fetch(`${WORKER}/input`, {
