@@ -25,37 +25,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const results: any[] = [];
 
-  // Спроба 3 (нова): src/api/euroclub.ts показав, що є ОКРЕМИЙ шлях /v1/json/{method}/,
-  // де ключ EUROCLUB_KEY підставляє САМ Worker curly-voice-8a71 автоматично — застосунок
-  // взагалі не передає жодного ключа сам. Метод order_confirm приймає hash (=oid) напряму,
-  // без uidkey. Пробуємо БЕЗ жодного ключа з нашого боку — якщо Worker сам підставляє.
+  // Кеп (18.08) підтвердив ТОЧНИЙ робочий формат для методу routes:
+  // eclub.com.ua/api/v1/json/routes/{KEY}/?from=..&to=..  — ключ ЯК ЧАСТИНА URL-ШЛЯХУ,
+  // напряму на eclub.com.ua (НЕ через curly-voice-8a71 з нашого боку — той сам вставляє
+  // ключ, коли викликаємо БЕЗ нього). Пробуємо той самий шаблон для order_confirm.
   try {
-    const url = `${WORKER}/v1/json/order_confirm/?hash=${encodeURIComponent(oid)}`;
+    const url = `https://eclub.com.ua/api/v1/json/order_confirm/${API_KEY}/?hash=${encodeURIComponent(oid)}`;
     const backendRes = await fetch(url, { cache: "no-store" });
     const rawText = await backendRes.text();
-    results.push({ label: "order_confirm через curly-voice-8a71 (без ключа з нашого боку)", url, httpStatus: backendRes.status, raw: rawText.slice(0, 2000) });
+    results.push({ label: "order_confirm напряму на eclub.com.ua, ключ у шляху", url, httpStatus: backendRes.status, raw: rawText.slice(0, 2000) });
   } catch (err) {
-    results.push({ label: "order_confirm через curly-voice-8a71", error: err instanceof Error ? err.message : String(err) });
+    results.push({ label: "order_confirm напряму на eclub.com.ua, ключ у шляху", error: err instanceof Error ? err.message : String(err) });
   }
 
-  const attempts: { label: string; body: Record<string, string> }[] = [
-    { label: "order_info + key як uidkey", body: { work: "work", app: "1", lng: "uk", uidkey: API_KEY, mod: "apimobile", opr: "order_info", oid } },
-    { label: "user-orders + key як uidkey + oid", body: { work: "work", app: "1", lng: "uk", uidkey: API_KEY, mod: "apimobile", opr: "user-orders", oid } },
-  ];
-
-  for (const attempt of attempts) {
-    try {
-      const backendRes = await fetch(`${WORKER}/input`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(attempt.body).toString(),
-        cache: "no-store",
-      });
-      const rawText = await backendRes.text();
-      results.push({ label: attempt.label, httpStatus: backendRes.status, raw: rawText.slice(0, 2000) });
-    } catch (err) {
-      results.push({ label: attempt.label, error: err instanceof Error ? err.message : String(err) });
-    }
+  // Контрольний тест — той самий шаблон, але для routes (Кеп підтвердив що ЦЕ працює) з
+  // фіксованими Київ→Берлін, щоб перевірити саму методику виклику (чи взагалі є мережевий
+  // доступ з нашого боку до eclub.com.ua напряму, чи тільки через curly-voice-8a71).
+  try {
+    const url = `https://eclub.com.ua/api/v1/json/routes/${API_KEY}/?from=1&to=4&crc=auto&date=22-11-2026`;
+    const backendRes = await fetch(url, { cache: "no-store" });
+    const rawText = await backendRes.text();
+    results.push({ label: "КОНТРОЛЬ: routes напряму (Кеп підтвердив робочий приклад)", url, httpStatus: backendRes.status, raw: rawText.slice(0, 500) + (rawText.length > 500 ? "…(обрізано)" : "") });
+  } catch (err) {
+    results.push({ label: "КОНТРОЛЬ: routes напряму", error: err instanceof Error ? err.message : String(err) });
   }
 
   res.status(200).json({ oid, results });
