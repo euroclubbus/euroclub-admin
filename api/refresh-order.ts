@@ -41,8 +41,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
     const sessionKey = (snap.data() as { sessionKey?: string })?.sessionKey;
-    if (!sessionKey) {
-      res.status(400).json({ error: "Немає збереженого sessionKey для цього замовлення — оновлення недоступне (старий запис до 11.08, sessionKey ще не записувався)" });
+    let effectiveSessionKey = sessionKey;
+    if (!effectiveSessionKey) {
+      // Кеп (18.08): фолбек на "живий" ключ юзера з user_sessions/{userId} — записується
+      // там щоразу, коли той юзер щось відкриває в застосунку, незалежно від того, чи є
+      // sessionKey саме на ЦЬОМУ замовленні (закриває проблему старих замовлень до 11.08).
+      const userId = (snap.data() as { backendUserId?: string; userId?: string })?.backendUserId
+        ?? (snap.data() as { userId?: string })?.userId;
+      if (userId) {
+        const userSnap = await db.collection("user_sessions").doc(userId).get();
+        if (userSnap.exists) effectiveSessionKey = (userSnap.data() as { sessionKey?: string })?.sessionKey;
+      }
+    }
+    if (!effectiveSessionKey) {
+      res.status(400).json({ error: "Немає sessionKey ні на замовленні, ні в user_sessions цього юзера — оновлення недоступне (юзер ще не заходив у застосунок після 18.08)" });
       return;
     }
 
@@ -50,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       work: "work",
       app: "1",
       lng: "uk",
-      uidkey: sessionKey,
+      uidkey: effectiveSessionKey,
       mod: "apimobile",
       opr: "user-orders",
       oid: orderNo, // прогер підтвердив (18.08): опційний фільтр — без нього бекенд
@@ -78,6 +90,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       backendPaidUah: Number(found.paid_uah) || 0,
       backendPaidEur: Number(found.paid_eur) || 0,
       backendSyncedAt: new Date().toISOString(),
+      ...(found.app !== undefined && found.app !== null && found.app !== "" ? { backendAppPlatform: String(found.app) } : {}),
+      ...(found.user_id !== undefined && found.user_id !== null && found.user_id !== "" ? { backendUserId: String(found.user_id) } : {}),
     });
 
     res.status(200).json({ ok: true, status: found.status ?? null });
