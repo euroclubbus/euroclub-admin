@@ -607,29 +607,6 @@ export function OrderRegistry() {
     }
   };
 
-  // ТИМЧАСОВО (Кеп, 17.08) — тест API-ключа для прямих запитів по oid. Прибрати після
-  // того, як з'ясуємо робочий формат і переробимо refresh-order.ts/bulk-refresh.ts.
-  const [testOid, setTestOid] = useState("");
-  const [testResult, setTestResult] = useState<any>(null);
-  const [testLoading, setTestLoading] = useState(false);
-  const testApiKey = async () => {
-    if (!testOid.trim()) return;
-    setTestLoading(true);
-    setTestResult(null);
-    try {
-      const res = await fetch("/api/test-api-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oid: testOid.trim() }),
-      });
-      setTestResult(await res.json());
-    } catch (e) {
-      setTestResult({ error: e instanceof Error ? e.message : String(e) });
-    } finally {
-      setTestLoading(false);
-    }
-  };
-
   return (
     <div>
       <header style={{ marginBottom: 20 }}>
@@ -650,20 +627,6 @@ export function OrderRegistry() {
             <option key={o.key} value={o.key}>{o.label}</option>
           ))}
         </select>
-      </div>
-
-      {/* ТИМЧАСОВО (Кеп, 17.08) — тест API-ключа для прямих запитів по oid */}
-      <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid var(--amber)", borderRadius: "var(--radius)", padding: 12, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700 }}>Тест API-ключа (тимчасово)</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={testOid} onChange={(e) => setTestOid(e.target.value)} placeholder="oid (напр. 1028475)" style={styles.dateInput} />
-          <button onClick={testApiKey} disabled={testLoading} style={styles.bulkRefreshBtn}>{testLoading ? "..." : "Тест"}</button>
-        </div>
-        {testResult && (
-          <pre style={{ fontSize: 11, background: "var(--surface)", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 400, whiteSpace: "pre-wrap" }}>
-            {JSON.stringify(testResult, null, 2)}
-          </pre>
-        )}
       </div>
 
       <div style={styles.filterBar}>
