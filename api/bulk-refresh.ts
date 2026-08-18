@@ -62,16 +62,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const refs = orderNos.map((oid: string) => db.collection("order_registry").doc(oid));
     const snaps = await db.getAll(...refs);
 
-    // Групуємо за sessionKey — замовлення без нього одразу в "пропущені".
-    const bySessionKey = new Map<string, string[]>(); // sessionKey -> [orderNo, ...]
-    let skippedNoSessionKey = 0;
+    // Кеп (18.08): якщо в самого замовлення немає sessionKey — пробуємо "живий" ключ цього
+    // ж юзера з user_sessions/{userId} (записується там щоразу, коли юзер щось відкриває
+    // в застосунку — не лише при бронюванні). Це і закриває проблему "160 старих замовлень
+    // без sessionKey" — досить, щоб той юзер БУДЬ-КОЛИ відкрив застосунок останнім часом.
+    type OrderInfo = { orderNo: string; ownSessionKey?: string; userId?: string };
+    const orderInfos: OrderInfo[] = [];
+    const userIdsNeedingLookup = new Set<string>();
     for (const snap of snaps) {
       if (!snap.exists) continue;
-      const sessionKey = (snap.data() as { sessionKey?: string })?.sessionKey;
-      if (!sessionKey) { skippedNoSessionKey++; continue; }
-      const arr = bySessionKey.get(sessionKey) ?? [];
-      arr.push(snap.id);
-      bySessionKey.set(sessionKey, arr);
+      const data = snap.data() as { sessionKey?: string; backendUserId?: string; userId?: string };
+      const userId = data.backendUserId ?? data.userId;
+      orderInfos.push({ orderNo: snap.id, ownSessionKey: data.sessionKey, userId });
+      if (!data.sessionKey && userId) userIdsNeedingLookup.add(userId);
+    }
+
+    const userSessionMap = new Map<string, string>(); // userId -> sessionKey
+    if (userIdsNeedingLookup.size > 0) {
+      const userIds = Array.from(userIdsNeedingLookup);
+      const userRefs = userIds.map((uid) => db.collection("user_sessions").doc(uid));
+      const userSnaps = await db.getAll(...userRefs);
+      userSnaps.forEach((s, i) => {
+        if (s.exists) {
+          const sk = (s.data() as { sessionKey?: string })?.sessionKey;
+          if (sk) userSessionMap.set(userIds[i], sk);
+        }
+      });
+    }
+
+    // Групуємо за ЕФЕКТИВНИМ sessionKey (власний АБО підхоплений з user_sessions).
+    const bySessionKey = new Map<string, string[]>();
+    let skippedNoSessionKey = 0;
+    let recoveredViaUserSession = 0;
+    for (const info of orderInfos) {
+      let effectiveKey = info.ownSessionKey;
+      if (!effectiveKey && info.userId) {
+        effectiveKey = userSessionMap.get(info.userId);
+        if (effectiveKey) recoveredViaUserSession++;
+      }
+      if (!effectiveKey) { skippedNoSessionKey++; continue; }
+      const arr = bySessionKey.get(effectiveKey) ?? [];
+      arr.push(info.orderNo);
+      bySessionKey.set(effectiveKey, arr);
     }
 
     const uniqueSessionKeys = Array.from(bySessionKey.keys());
@@ -120,6 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updated,
       notFoundInBackend,
       skippedNoSessionKey,
+      recoveredViaUserSession,
     });
   } catch (err) {
     console.error("bulk-refresh error:", err);
