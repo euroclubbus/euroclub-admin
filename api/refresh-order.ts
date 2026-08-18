@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const sessionKey = (snap.data() as { sessionKey?: string })?.sessionKey;
     if (!sessionKey) {
-      res.status(400).json({ error: "Немає збереженого sessionKey для цього замовлення — оновлення недоступне (старий запис до 10.08 або гостьове бронювання)" });
+      res.status(400).json({ error: "Немає збереженого sessionKey для цього замовлення — оновлення недоступне (старий запис до 11.08, sessionKey ще не записувався)" });
       return;
     }
 
@@ -53,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       uidkey: sessionKey,
       mod: "apimobile",
       opr: "user-orders",
+      oid: orderNo, // прогер підтвердив (18.08): опційний фільтр — без нього бекенд
+      // повертає ВСЮ історію юзера, з ним — лише одне замовлення. Менший payload.
       _ts: String(Date.now()),
     });
 
