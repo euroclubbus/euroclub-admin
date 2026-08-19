@@ -36,7 +36,7 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
   });
 }
 
-function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: OrderRegistryDoc; appOrdersCount: number | null; selected: boolean; onToggleSelect: () => void }) {
+function OrderRow({ order, userStats, selected, onToggleSelect }: { order: OrderRegistryDoc; userStats: { total: number; app1: number; app2: number } | null; selected: boolean; onToggleSelect: () => void }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Пріоритет — живий userId з бекенду (backendUserId, синхронізується автоматично, тому
@@ -223,13 +223,21 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
             <span style={styles.rowStatValue}>{(order.backendAppPlatform ?? order.appPlatform) !== undefined && (order.backendAppPlatform ?? order.appPlatform) !== null ? `APP${order.backendAppPlatform ?? order.appPlatform}` : "—"}</span>
             <span style={styles.rowStatLabel}>джерело</span>
           </div>
-          <div style={styles.rowStat} title="Скільки замовлень цього email мають app=1 або app=2 (з додатку/PWA) — app=0 не рахується">
-            <span style={styles.rowStatValue}>{appOrdersCount ?? "—"}</span>
+          <div style={styles.rowStat} title="Усі замовлення цього userId у реєстрі">
+            <span style={styles.rowStatValue}>{userStats?.total ?? "—"}</span>
+            <span style={styles.rowStatLabel}>всі замовлення</span>
+          </div>
+          <div style={styles.rowStat} title="Сума APP1 (Android) + APP2 (iPhone) для цього userId">
+            <span style={styles.rowStatValue}>{userStats ? userStats.app1 + userStats.app2 : "—"}</span>
             <span style={styles.rowStatLabel}>з додатку</span>
           </div>
-          <div style={styles.rowStat} title="Повна історія замовлень цього юзера (всі канали) — зафіксована застосунком у момент цього бронювання, поки була жива сесія юзера">
-            <span style={styles.rowStatValue}>{order.totalOrdersCount ?? "—"}</span>
-            <span style={styles.rowStatLabel}>всього</span>
+          <div style={styles.rowStat} title="APP1 = Android">
+            <span style={styles.rowStatValue}>{userStats?.app1 ?? "—"}</span>
+            <span style={styles.rowStatLabel}>Android</span>
+          </div>
+          <div style={styles.rowStat} title="APP2 = iPhone">
+            <span style={styles.rowStatValue}>{userStats?.app2 ?? "—"}</span>
+            <span style={styles.rowStatLabel}>iPhone</span>
           </div>
         </div>
         <div style={styles.createdAt}>{fmtDateTime(order.createdAt)}</div>
@@ -512,18 +520,20 @@ export function OrderRegistry() {
     return sortOrders(base, sortKey);
   }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, bookingDateFrom, bookingDateTo, routeFilter]);
 
-  // Лічильник "скільки замовлень цього email саме ЧЕРЕЗ ЗАСТОСУНОК" — за формулою Кепа
-  // (19.08): app="0" -> НЕ з додатку, app="1" або "2" -> з додатку. Пріоритет — живе поле
-  // з бекенду (backendAppPlatform), фолбек на власний запис (appPlatform). Рахуємо по ВСІХ
-  // завантажених замовленнях (не тільки відфільтрованих), щоб цифра не мінялась залежно
-  // від активного фільтра/пошуку.
-  const emailCounts = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Статистика по userId (Кеп, 19.08, точна специфікація):
+  // "всі замовлення" = всі документи реєстру з тим самим userId
+  // "з додатку" = app1 + app2 (сума)
+  // окремо: app1 (Android), app2 (iPhone)
+  const userStatsMap = useMemo(() => {
+    const map: Record<string, { total: number; app1: number; app2: number }> = {};
     for (const o of orders) {
-      if (!o.userEmail) continue;
-      const app = o.backendAppPlatform ?? o.appPlatform;
-      if (app === undefined || app === null || String(app) === '0') continue;
-      map[o.userEmail] = (map[o.userEmail] || 0) + 1;
+      const uid = o.backendUserId ?? o.userId;
+      if (!uid) continue;
+      if (!map[uid]) map[uid] = { total: 0, app1: 0, app2: 0 };
+      map[uid].total++;
+      const app = String(o.backendAppPlatform ?? o.appPlatform ?? "");
+      if (app === "1") map[uid].app1++;
+      else if (app === "2") map[uid].app2++;
     }
     return map;
   }, [orders]);
@@ -734,7 +744,7 @@ export function OrderRegistry() {
           <OrderRow
             key={o.orderNo}
             order={o}
-            appOrdersCount={o.userEmail ? emailCounts[o.userEmail] ?? null : null}
+            userStats={(o.backendUserId ?? o.userId) ? userStatsMap[(o.backendUserId ?? o.userId) as string] ?? null : null}
             selected={selectedIds.has(o.orderNo)}
             onToggleSelect={() => toggleSelect(o.orderNo)}
           />
