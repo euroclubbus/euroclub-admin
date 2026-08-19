@@ -223,7 +223,7 @@ function OrderRow({ order, appOrdersCount, selected, onToggleSelect }: { order: 
             <span style={styles.rowStatValue}>{(order.backendAppPlatform ?? order.appPlatform) !== undefined && (order.backendAppPlatform ?? order.appPlatform) !== null ? `APP${order.backendAppPlatform ?? order.appPlatform}` : "—"}</span>
             <span style={styles.rowStatLabel}>джерело</span>
           </div>
-          <div style={styles.rowStat} title="Скільки замовлень цього email зроблено САМЕ через нативний застосунок (не сайт/PWA) — по order_registry">
+          <div style={styles.rowStat} title="Скільки замовлень цього email мають app=1 або app=2 (з додатку/PWA) — app=0 не рахується">
             <span style={styles.rowStatValue}>{appOrdersCount ?? "—"}</span>
             <span style={styles.rowStatLabel}>з додатку</span>
           </div>
@@ -512,15 +512,17 @@ export function OrderRegistry() {
     return sortOrders(base, sortKey);
   }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, bookingDateFrom, bookingDateTo, routeFilter]);
 
-  // Лічильник "скільки замовлень цього email саме ЧЕРЕЗ ЗАСТОСУНОК" (не сайт) — рахуємо
-  // тільки viaApp===true, по ВСІХ завантажених замовленнях (не тільки відфільтрованих),
-  // щоб цифра не мінялась залежно від активного фільтра/пошуку. Замовлення без viaApp
-  // (старі записи, до цього поля) в підрахунок не потрапляють — краще недорахувати, ніж
-  // помилково зарахувати сайт як застосунок.
+  // Лічильник "скільки замовлень цього email саме ЧЕРЕЗ ЗАСТОСУНОК" — за формулою Кепа
+  // (19.08): app="0" -> НЕ з додатку, app="1" або "2" -> з додатку. Пріоритет — живе поле
+  // з бекенду (backendAppPlatform), фолбек на власний запис (appPlatform). Рахуємо по ВСІХ
+  // завантажених замовленнях (не тільки відфільтрованих), щоб цифра не мінялась залежно
+  // від активного фільтра/пошуку.
   const emailCounts = useMemo(() => {
     const map: Record<string, number> = {};
     for (const o of orders) {
-      if (!o.userEmail || o.viaApp !== true) continue;
+      if (!o.userEmail) continue;
+      const app = o.backendAppPlatform ?? o.appPlatform;
+      if (app === undefined || app === null || String(app) === '0') continue;
       map[o.userEmail] = (map[o.userEmail] || 0) + 1;
     }
     return map;
