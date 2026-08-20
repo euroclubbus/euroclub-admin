@@ -228,12 +228,54 @@ export interface MetaAdsCampaign {
   name: string;
   status: string; // ACTIVE / PAUSED / ...
   objective: string;
-  spend: number;
+  buyingType?: string;
+
   impressions: number;
+  reach: number;
+  frequency: number;
+  spend: number;
+
   clicks: number;
-  ctr: number;
+  uniqueClicks: number;
+  inlineLinkClicks: number;
+  uniqueInlineLinkClicks: number;
+  outboundClicks: number;
+  uniqueOutboundClicks: number;
+
+  cpm: number;
   cpc: number;
+  cpp: number;
+  ctr: number;
+  uniqueCtr: number;
+  costPerOutboundClick: number;
+
   leads: number;
+  purchases: number;
+  messagingConversations: number;
+  actions: { action_type: string; value: string }[];
+  actionValues: { action_type: string; value: string }[];
+  costPerActionType: { action_type: string; value: string }[];
+  conversions: { action_type: string; value: string }[];
+  conversionValues: { action_type: string; value: string }[];
+  costPerConversion: { action_type: string; value: string }[];
+
+  inlinePostEngagement: number;
+
+  videoPlays: number;
+  videoThruplay: number;
+  videoP25: number;
+  videoP50: number;
+  videoP75: number;
+  videoP95: number;
+  videoP100: number;
+
+  qualityRanking?: string;
+  engagementRateRanking?: string;
+  conversionRateRanking?: string;
+
+  optimizationGoal?: string;
+  dateStart?: string;
+  dateStop?: string;
 }
 
 export interface MetaAdsData {
