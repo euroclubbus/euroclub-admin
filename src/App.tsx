@@ -10,6 +10,7 @@ import { RoutesList } from "./components/RoutesList";
 import { InboxList } from "./components/InboxList";
 import { ReportFilters } from "./components/ReportFilters";
 import { OrderRegistry } from "./components/OrderRegistry";
+import { MarketingDashboard } from "./components/MarketingDashboard";
 import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
 
 export default function App() {
@@ -50,6 +51,8 @@ export default function App() {
         <ReportFilters />
       ) : tab === "registry" ? (
         <OrderRegistry />
+      ) : tab === "marketing" ? (
+        <MarketingDashboard />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>

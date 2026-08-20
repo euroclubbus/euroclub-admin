@@ -220,3 +220,34 @@ export interface FleetBus {
   photos: string[]; // Firebase Storage download URL, порядок = порядок показу
   galleryMode: "slider" | "collage";
 }
+
+// --- Маркетинг (Meta Ads) ---
+
+export interface MetaAdsCampaign {
+  id: string;
+  name: string;
+  status: string; // ACTIVE / PAUSED / ...
+  objective: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  leads: number;
+}
+
+export interface MetaAdsData {
+  generatedAt: string;
+  account: { id: string; name: string; currency: string };
+  campaigns: MetaAdsCampaign[];
+}
+
+// Ручні цифри зі звіту підрядчика — по одному документу на кампанію,
+// id документа = campaign_id з Meta. Порівнюється з реальними даними API.
+export interface ContractorReportEntry {
+  id: string; // = campaign_id
+  spend?: number;
+  leads?: number;
+  note?: string;
+  updatedAt?: string;
+}

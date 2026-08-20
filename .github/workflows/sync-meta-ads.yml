@@ -1,0 +1,30 @@
+name: Sync Meta Ads data
+
+on:
+  schedule:
+    # Щодня о 06:00 UTC (08:00/09:00 за Києвом залежно від сезону)
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch Meta Ads data
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          META_AD_ACCOUNT_ID: ${{ secrets.META_AD_ACCOUNT_ID }}
+        run: bash scripts/sync-meta-ads.sh
+
+      - name: Commit updated data
+        run: |
+          git config user.name "meta-ads-sync-bot"
+          git config user.email "actions@github.com"
+          git add public/data/meta-ads.json
+          git diff --cached --quiet && echo "No changes" || git commit -m "chore: sync Meta Ads data $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push

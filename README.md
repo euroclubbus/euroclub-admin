@@ -53,6 +53,25 @@ Serverless-функція (`/api/send-push`) локально через `npm ru
 не показуй посилання на панель нікому зайвому і не вважай пароль захистом
 від навмисної атаки.
 
+## 4b. Маркетинг (синхронізація з Meta Ads)
+
+Розділ "Маркетинг" читає статичний файл `public/data/meta-ads.json`, який
+оновлює GitHub Action `.github/workflows/sync-meta-ads.yml` (щодня, і вручну
+через "Run workflow" в GitHub → Actions).
+
+Потрібно додати в **Settings → Secrets and variables → Actions** цього
+репозиторію:
+
+- `META_ACCESS_TOKEN` — System User токен з Meta Business Settings
+  (Users → System Users → Generate New Token), дозволи `ads_read` +
+  `ads_management`. На відміну від токена з Graph API Explorer, System User
+  токен не має терміну дії.
+- `META_AD_ACCOUNT_ID` — напр. `act_1118039983089010`
+
+Звіт підрядчика вноситься вручну прямо в UI (кнопка "Внести"/"Редагувати"
+навпроти кожної кампанії) і зберігається в Firestore-колекції
+`marketing_contractor_report` — окремо від даних Meta, для звірки.
+
 ## 5. Структура даних (те, що йде в основний чат euroclub-app)
 
 - `side_menu_items` — документ на пункт: `{ order, icon, label, url }`.

@@ -74,5 +74,12 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Ручні цифри зі звіту підрядчика по рекламі — тільки панель, мобільний
+    // додаток сюди не звертається взагалі.
+    match /marketing_contractor_report/{campaignId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }
