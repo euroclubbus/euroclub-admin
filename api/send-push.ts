@@ -60,6 +60,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       targetUserIds = snap.map((d) => d.id);
     }
 
+    // Кеп (19.08): "папка сповіщень" пишеться ЗАВЖДИ, незалежно від того, чи дійде push —
+    // окрема, незалежна дія від самого push-надсилання. Робимо це одразу тут (перш ніж
+    // навіть звертатись до Worker'а), щоб запис у папку не залежав від успіху/невдачі push.
+    const notifTitle = title.trim();
+    const notifBody = body.trim();
+    const notifCreatedAt = new Date().toISOString();
+    {
+      let batch = db.batch();
+      let batchCount = 0;
+      for (const uid of targetUserIds) {
+        const ref = db.collection("notifications").doc(uid).collection("messages").doc();
+        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt });
+        batchCount++;
+        if (batchCount >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          batchCount = 0;
+        }
+      }
+      if (batchCount > 0) await batch.commit();
+    }
+
     const targetCount = targetUserIds.length;
     let successCount = 0;
     let status: "sent" | "partial" | "failed" = "failed";
