@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, getDocs, setDoc } from "firebase/firestore";
-import { RefreshCw, TrendingUp, AlertTriangle, Clock } from "lucide-react";
+import { Search, Download, FileSpreadsheet, AlertTriangle, CheckSquare, Square } from "lucide-react";
 import { db } from "../lib/firebase";
-import { ContractorReportEntry, MetaAdsCampaign, MetaAdsData } from "../lib/types";
+import { ContractorReportEntry, MetaAdsCampaign, MetaAdsReportResponse } from "../lib/types";
 
 const CONTRACTOR_COLLECTION = "marketing_contractor_report";
 
@@ -14,20 +14,52 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("uk-UA").format(value);
 }
 
-function timeAgo(iso: string) {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const hours = Math.floor(diffMs / 3_600_000);
-  if (hours < 1) return "менше години тому";
-  if (hours < 24) return `${hours} год тому`;
-  const days = Math.floor(hours / 24);
-  return `${days} дн тому`;
+function defaultSince() {
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  return d.toISOString().slice(0, 10);
+}
+
+function defaultUntil() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function toCsv(campaigns: MetaAdsCampaign[], currency: string): string {
+  const headers = ["Кампанія", "Ціль", "Витрати", "Покази", "Охоплення", "Кліки", "CTR %", "CPC", "Ліди"];
+  const rows = campaigns.map((c) => [
+    c.name,
+    c.objective,
+    c.spend.toFixed(2),
+    String(c.impressions),
+    String(c.reach),
+    String(c.clicks),
+    c.ctr.toFixed(2),
+    c.cpc.toFixed(2),
+    String(c.leads),
+  ]);
+  const escape = (v: string) => (v.includes(",") || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v);
+  return [headers, ...rows].map((r) => r.map(escape).join(",")).join("\n");
+}
+
+function downloadFile(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export function MarketingDashboard() {
-  const [data, setData] = useState<MetaAdsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [since, setSince] = useState(defaultSince());
+  const [until, setUntil] = useState(defaultUntil());
+
+  const [report, setReport] = useState<MetaAdsReportResponse | null>(null);
+  const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused">("active");
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [contractor, setContractor] = useState<Record<string, ContractorReportEntry>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -36,18 +68,18 @@ export function MarketingDashboard() {
   const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function loadMetaData() {
+  async function loadReport() {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(`/data/meta-ads.json?t=${Date.now()}`);
-      if (!res.ok) throw new Error("no-file");
-      const json = (await res.json()) as MetaAdsData;
-      setData(json);
-    } catch {
-      setLoadError(
-        "Ще немає даних із Meta Ads. Дані з'являться після першого запуску GitHub Action (sync-meta-ads), або запусти його вручну в GitHub → Actions."
-      );
+      const res = await fetch(`/api/meta-ads-report?since=${since}&until=${until}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Помилка запиту");
+      setReport(json as MetaAdsReportResponse);
+      setSelected(new Set((json.campaigns as MetaAdsCampaign[]).map((c) => c.id)));
+    } catch (err) {
+      setReport(null);
+      setLoadError(err instanceof Error ? err.message : "Не вдалося завантажити дані");
     } finally {
       setLoading(false);
     }
@@ -63,25 +95,16 @@ export function MarketingDashboard() {
   }
 
   useEffect(() => {
-    loadMetaData();
     loadContractorReport();
   }, []);
 
-  const campaigns = data?.campaigns ?? [];
-  const currency = data?.account.currency ?? "EUR";
+  const campaigns = report?.campaigns ?? [];
+  const currency = report?.account.currency ?? "EUR";
 
-  const filtered = useMemo(() => {
-    return campaigns
-      .filter((c) => {
-        if (statusFilter === "active") return c.status === "ACTIVE";
-        if (statusFilter === "paused") return c.status !== "ACTIVE";
-        return true;
-      })
-      .sort((a, b) => b.spend - a.spend);
-  }, [campaigns, statusFilter]);
+  const selectedCampaigns = useMemo(() => campaigns.filter((c) => selected.has(c.id)), [campaigns, selected]);
 
   const totals = useMemo(() => {
-    return filtered.reduce(
+    return selectedCampaigns.reduce(
       (acc, c) => {
         acc.spend += c.spend;
         acc.impressions += c.impressions;
@@ -91,7 +114,20 @@ export function MarketingDashboard() {
       },
       { spend: 0, impressions: 0, clicks: 0, leads: 0 }
     );
-  }, [filtered]);
+  }, [selectedCampaigns]);
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((prev) => (prev.size === campaigns.length ? new Set() : new Set(campaigns.map((c) => c.id))));
+  }
 
   function startEdit(c: MetaAdsCampaign) {
     setEditingId(c.id);
@@ -118,28 +154,40 @@ export function MarketingDashboard() {
     }
   }
 
+  function exportCsv() {
+    downloadFile(toCsv(selectedCampaigns, currency), `meta-ads_${since}_${until}.csv`, "text/csv;charset=utf-8");
+  }
+
+  function exportJson() {
+    downloadFile(
+      JSON.stringify({ range: { since, until }, account: report?.account, campaigns: selectedCampaigns }, null, 2),
+      `meta-ads_${since}_${until}.json`,
+      "application/json"
+    );
+  }
+
   return (
     <div>
       <header style={styles.header}>
         <div>
           <h1 style={styles.title}>Маркетинг</h1>
-          <p style={styles.subtitle}>
-            Реальні дані з Meta Ads Manager (останні 30 днів) — з можливістю звірити зі звітом підрядчика.
-          </p>
+          <p style={styles.subtitle}>Обери діапазон дат — покажу всі кампанії, що працювали за цей період.</p>
         </div>
-        <button style={styles.refreshBtn} onClick={loadMetaData} disabled={loading}>
-          <RefreshCw size={14} className={loading ? "spin" : ""} /> Оновити
-        </button>
       </header>
 
-      {data && (
-        <div style={styles.metaBar}>
-          <Clock size={13} color="var(--text-faint)" />
-          <span style={styles.metaText}>
-            Дані оновлено {timeAgo(data.generatedAt)} · Кабінет: {data.account.name} ({data.account.id})
-          </span>
-        </div>
-      )}
+      <div style={styles.rangeBar}>
+        <label style={styles.rangeLabel}>
+          Від
+          <input style={styles.dateInput} type="date" value={since} onChange={(e) => setSince(e.target.value)} />
+        </label>
+        <label style={styles.rangeLabel}>
+          До
+          <input style={styles.dateInput} type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+        </label>
+        <button style={styles.showBtn} onClick={loadReport} disabled={loading}>
+          <Search size={14} /> {loading ? "Завантаження…" : "Показати кампанії"}
+        </button>
+      </div>
 
       {loadError && (
         <div style={styles.errorCard}>
@@ -148,11 +196,15 @@ export function MarketingDashboard() {
         </div>
       )}
 
-      {data && (
+      {report && (
         <>
+          <div style={styles.metaBar}>
+            Кабінет: {report.account.name} ({report.account.id}) · Період: {since} — {until}
+          </div>
+
           <div style={styles.summaryGrid}>
             <div style={styles.summaryCard}>
-              <div style={styles.summaryLabel}>Витрачено</div>
+              <div style={styles.summaryLabel}>Витрачено (обрані)</div>
               <div style={styles.summaryValue}>{formatMoney(totals.spend, currency)}</div>
             </div>
             <div style={styles.summaryCard}>
@@ -169,29 +221,28 @@ export function MarketingDashboard() {
             </div>
           </div>
 
-          <div style={styles.filterRow}>
-            {(["active", "all", "paused"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setStatusFilter(f)}
-                style={{
-                  ...styles.filterBtn,
-                  background: statusFilter === f ? "var(--amber)" : "var(--surface-raised)",
-                  color: statusFilter === f ? "#1a1305" : "var(--text-muted)",
-                }}
-              >
-                {f === "active" ? "Активні" : f === "paused" ? "Призупинені" : "Всі"}
-              </button>
-            ))}
+          <div style={styles.toolbar}>
+            <button style={styles.toolbarBtn} onClick={toggleAll}>
+              {selected.size === campaigns.length ? <CheckSquare size={14} /> : <Square size={14} />}
+              {selected.size === campaigns.length ? "Зняти всі" : "Обрати всі"} ({selected.size}/{campaigns.length})
+            </button>
+            <div style={{ flex: 1 }} />
+            <button style={styles.toolbarBtn} onClick={exportCsv} disabled={selectedCampaigns.length === 0}>
+              <FileSpreadsheet size={14} /> CSV / Excel
+            </button>
+            <button style={styles.toolbarBtn} onClick={exportJson} disabled={selectedCampaigns.length === 0}>
+              <Download size={14} /> JSON
+            </button>
           </div>
 
           <div style={styles.tableWrap}>
             <table style={styles.table}>
               <thead>
                 <tr>
+                  <th style={styles.th} />
                   <th style={styles.th}>Кампанія</th>
-                  <th style={styles.th}>Витрати (Meta)</th>
-                  <th style={styles.th}>Ліди (Meta)</th>
+                  <th style={styles.th}>Витрати</th>
+                  <th style={styles.th}>Ліди</th>
                   <th style={styles.th}>CTR</th>
                   <th style={styles.th}>Звіт підрядчика</th>
                   <th style={styles.th}>Різниця</th>
@@ -199,18 +250,27 @@ export function MarketingDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => {
+                {campaigns.length === 0 && (
+                  <tr>
+                    <td style={styles.td} colSpan={8}>
+                      За обраний період не знайдено кампаній з активністю.
+                    </td>
+                  </tr>
+                )}
+                {campaigns.map((c) => {
                   const cr = contractor[c.id];
                   const spendDiff = cr?.spend != null ? cr.spend - c.spend : null;
                   const leadsDiff = cr?.leads != null ? cr.leads - c.leads : null;
                   const isEditing = editingId === c.id;
+                  const isSelected = selected.has(c.id);
                   return (
                     <tr key={c.id} style={styles.tr}>
                       <td style={styles.td}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleOne(c.id)} />
+                      </td>
+                      <td style={styles.td}>
                         <div style={{ fontWeight: 600 }}>{c.name}</div>
-                        <div style={styles.mutedSmall}>
-                          {c.status === "ACTIVE" ? "🟢 Активна" : "⏸ Призупинена"} · {c.objective}
-                        </div>
+                        <div style={styles.mutedSmall}>{c.objective}</div>
                       </td>
                       <td style={styles.td}>{formatMoney(c.spend, currency)}</td>
                       <td style={styles.td}>{formatNumber(c.leads)}</td>
@@ -218,33 +278,12 @@ export function MarketingDashboard() {
                       <td style={styles.td}>
                         {isEditing ? (
                           <div style={styles.editBox}>
-                            <input
-                              style={styles.editInput}
-                              placeholder="Витрати"
-                              value={editSpend}
-                              onChange={(e) => setEditSpend(e.target.value)}
-                              type="number"
-                            />
-                            <input
-                              style={styles.editInput}
-                              placeholder="Ліди"
-                              value={editLeads}
-                              onChange={(e) => setEditLeads(e.target.value)}
-                              type="number"
-                            />
-                            <input
-                              style={styles.editInput}
-                              placeholder="Нотатка"
-                              value={editNote}
-                              onChange={(e) => setEditNote(e.target.value)}
-                            />
+                            <input style={styles.editInput} placeholder="Витрати" value={editSpend} onChange={(e) => setEditSpend(e.target.value)} type="number" />
+                            <input style={styles.editInput} placeholder="Ліди" value={editLeads} onChange={(e) => setEditLeads(e.target.value)} type="number" />
+                            <input style={styles.editInput} placeholder="Нотатка" value={editNote} onChange={(e) => setEditNote(e.target.value)} />
                             <div style={{ display: "flex", gap: 6 }}>
-                              <button style={styles.saveBtn} onClick={() => saveContractorEntry(c.id)} disabled={saving}>
-                                Зберегти
-                              </button>
-                              <button style={styles.cancelBtn} onClick={() => setEditingId(null)}>
-                                Скасувати
-                              </button>
+                              <button style={styles.saveBtn} onClick={() => saveContractorEntry(c.id)} disabled={saving}>Зберегти</button>
+                              <button style={styles.cancelBtn} onClick={() => setEditingId(null)}>Скасувати</button>
                             </div>
                           </div>
                         ) : cr ? (
@@ -260,15 +299,11 @@ export function MarketingDashboard() {
                       <td style={styles.td}>
                         {spendDiff != null && (
                           <div style={{ color: Math.abs(spendDiff) > c.spend * 0.1 ? "var(--danger, #d24)" : "var(--text-muted)" }}>
-                            {spendDiff > 0 ? "+" : ""}
-                            {formatMoney(spendDiff, currency)}
+                            {spendDiff > 0 ? "+" : ""}{formatMoney(spendDiff, currency)}
                           </div>
                         )}
                         {leadsDiff != null && (
-                          <div style={styles.mutedSmall}>
-                            {leadsDiff > 0 ? "+" : ""}
-                            {leadsDiff} лідів
-                          </div>
+                          <div style={styles.mutedSmall}>{leadsDiff > 0 ? "+" : ""}{leadsDiff} лідів</div>
                         )}
                       </td>
                       <td style={styles.td}>
@@ -287,33 +322,29 @@ export function MarketingDashboard() {
         </>
       )}
 
-      {!data && !loadError && loading && <div style={styles.mutedSmall}>Завантаження…</div>}
-
-      <div style={styles.footNote}>
-        <TrendingUp size={13} color="var(--text-faint)" />
-        <span style={styles.mutedSmall}>
-          Дані Meta синхронізуються автоматично раз на добу через GitHub Action. Звіт підрядчика вноситься вручну і
-          зберігається окремо для звірки.
-        </span>
-      </div>
+      {!report && !loadError && !loading && (
+        <div style={styles.mutedSmall}>Обери діапазон дат і натисни "Показати кампанії".</div>
+      )}
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
+  header: { marginBottom: 16 },
   title: { fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 },
   subtitle: { color: "var(--text-muted)", fontSize: 13, marginTop: 6, maxWidth: 460 },
-  refreshBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: "var(--radius)", padding: "8px 12px", fontSize: 12.5, color: "var(--text)", whiteSpace: "nowrap" },
-  metaBar: { display: "flex", alignItems: "center", gap: 6, marginBottom: 20 },
-  metaText: { fontSize: 12, color: "var(--text-faint)" },
+  rangeBar: { display: "flex", alignItems: "flex-end", gap: 12, marginBottom: 16, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: 14 },
+  rangeLabel: { display: "flex", flexDirection: "column", gap: 5, fontSize: 11.5, color: "var(--text-muted)" },
+  dateInput: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: "var(--radius)", padding: "8px 10px", fontSize: 13, color: "var(--text)", outline: "none" },
+  showBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--amber)", color: "#1a1305", border: "none", borderRadius: "var(--radius)", padding: "9px 16px", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" },
   errorCard: { display: "flex", alignItems: "flex-start", gap: 8, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: 14, fontSize: 13, color: "var(--text-muted)", marginBottom: 20 },
-  summaryGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 },
+  metaBar: { fontSize: 12, color: "var(--text-faint)", marginBottom: 16 },
+  summaryGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 },
   summaryCard: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "14px 16px" },
   summaryLabel: { fontSize: 11, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 },
   summaryValue: { fontSize: 20, fontWeight: 600, fontFamily: "var(--font-display)" },
-  filterRow: { display: "flex", gap: 6, marginBottom: 12 },
-  filterBtn: { border: "none", borderRadius: "var(--radius)", padding: "7px 14px", fontSize: 12.5, fontWeight: 600 },
+  toolbar: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
+  toolbarBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: "var(--radius)", padding: "7px 12px", fontSize: 12.5, color: "var(--text)" },
   tableWrap: { overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius)" },
   table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   th: { textAlign: "left", padding: "10px 12px", fontSize: 11, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid var(--hairline)", background: "var(--surface)" },
@@ -325,5 +356,4 @@ const styles: Record<string, React.CSSProperties> = {
   saveBtn: { background: "var(--amber)", color: "#1a1305", border: "none", borderRadius: "var(--radius)", padding: "6px 10px", fontSize: 12, fontWeight: 600 },
   cancelBtn: { background: "transparent", border: "1px solid var(--hairline-strong)", borderRadius: "var(--radius)", padding: "6px 10px", fontSize: 12, color: "var(--text-muted)" },
   editLink: { background: "transparent", border: "none", color: "var(--amber)", fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
-  footNote: { display: "flex", alignItems: "flex-start", gap: 6, marginTop: 16 },
 };

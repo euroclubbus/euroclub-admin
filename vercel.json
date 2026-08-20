@@ -5,6 +5,9 @@
   "functions": {
     "api/send-push.ts": {
       "maxDuration": 30
+    },
+    "api/meta-ads-report.ts": {
+      "maxDuration": 30
     }
   }
 }

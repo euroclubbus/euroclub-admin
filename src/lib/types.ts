@@ -226,9 +226,9 @@ export interface FleetBus {
 export interface MetaAdsCampaign {
   id: string;
   name: string;
-  status: string; // ACTIVE / PAUSED / ...
   objective: string;
   buyingType?: string;
+  optimizationGoal?: string;
 
   impressions: number;
   reach: number;
@@ -238,16 +238,12 @@ export interface MetaAdsCampaign {
   clicks: number;
   uniqueClicks: number;
   inlineLinkClicks: number;
-  uniqueInlineLinkClicks: number;
-  outboundClicks: number;
-  uniqueOutboundClicks: number;
 
   cpm: number;
   cpc: number;
   cpp: number;
   ctr: number;
   uniqueCtr: number;
-  costPerOutboundClick: number;
 
   leads: number;
   purchases: number;
@@ -272,14 +268,13 @@ export interface MetaAdsCampaign {
   qualityRanking?: string;
   engagementRateRanking?: string;
   conversionRateRanking?: string;
-
-  optimizationGoal?: string;
-  dateStart?: string;
-  dateStop?: string;
 }
 
-export interface MetaAdsData {
+// Відповідь /api/meta-ads-report — запитується "on demand" за конкретний
+// діапазон дат (не кешується/не синхронізується у фоні).
+export interface MetaAdsReportResponse {
   generatedAt: string;
+  range: { since: string; until: string };
   account: { id: string; name: string; currency: string };
   campaigns: MetaAdsCampaign[];
 }

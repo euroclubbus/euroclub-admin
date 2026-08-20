@@ -53,14 +53,14 @@ Serverless-функція (`/api/send-push`) локально через `npm ru
 не показуй посилання на панель нікому зайвому і не вважай пароль захистом
 від навмисної атаки.
 
-## 4b. Маркетинг (синхронізація з Meta Ads)
+## 4b. Маркетинг (Meta Ads — запит на вимогу)
 
-Розділ "Маркетинг" читає статичний файл `public/data/meta-ads.json`, який
-оновлює GitHub Action `.github/workflows/sync-meta-ads.yml` (щодня, і вручну
-через "Run workflow" в GitHub → Actions).
+Розділ "Маркетинг" НЕ синхронізується у фоні — дані запитуються тільки коли
+адмін сам обирає діапазон дат і тисне "Показати кампанії". Запит іде до
+serverless-функції `api/meta-ads-report.ts`, яка стукається в Meta Graph API
+напряму й повертає всі кампанії, що мали активність за обраний період.
 
-Потрібно додати в **Settings → Secrets and variables → Actions** цього
-репозиторію:
+Потрібно додати у **Vercel → Project Settings → Environment Variables**:
 
 - `META_ACCESS_TOKEN` — System User токен з Meta Business Settings
   (Users → System Users → Generate New Token), дозволи `ads_read` +
@@ -68,9 +68,11 @@ Serverless-функція (`/api/send-push`) локально через `npm ru
   токен не має терміну дії.
 - `META_AD_ACCOUNT_ID` — напр. `act_1118039983089010`
 
-Звіт підрядчика вноситься вручну прямо в UI (кнопка "Внести"/"Редагувати"
-навпроти кожної кампанії) і зберігається в Firestore-колекції
-`marketing_contractor_report` — окремо від даних Meta, для звірки.
+В UI можна відмітити, які кампанії включити у звіт, і вивантажити CSV
+(відкривається в Excel) або JSON. Звіт підрядчика вноситься вручну прямо в
+таблиці (кнопка "Внести"/"Редагувати" навпроти кожної кампанії) і
+зберігається в Firestore-колекції `marketing_contractor_report` — окремо
+від даних Meta, для звірки.
 
 ## 5. Структура даних (те, що йде в основний чат euroclub-app)
 
