@@ -88,7 +88,7 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
       const res = await fetch("/api/send-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: notifTitle.trim(), body: notifBody.trim(), userIds: [effectiveUserId] }),
+        body: JSON.stringify({ title: notifTitle.trim(), body: notifBody.trim(), userIds: [effectiveUserId], type: "service" }),
       });
       const data = await res.json();
       setNotifResult(data.successCount > 0 ? "sent" : "failed");
@@ -586,7 +586,7 @@ export function OrderRegistry() {
       const res = await fetch("/api/send-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: massTitle.trim(), body: massBody.trim(), userIds: selectedUserIds }),
+        body: JSON.stringify({ title: massTitle.trim(), body: massBody.trim(), userIds: selectedUserIds, type: "service" }),
       });
       const data = await res.json();
       setMassResult({ sent: data.successCount ?? 0, total: selectedUserIds.length });
