@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { title, body, deepLink, userIds } = req.body ?? {};
+  const { title, body, deepLink, userIds, type } = req.body ?? {};
 
   if (typeof title !== "string" || !title.trim() || typeof body !== "string" || !body.trim()) {
     res.status(400).json({ error: "Потрібні поля title і body" });
@@ -37,6 +37,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: "userIds має бути масивом" });
     return;
   }
+  // Кеп (20.08): marketing = загальні акції/новини, service = транзакційні (по замовленню/
+  // рейсу) — позначаються червоною міткою в "Моїх сповіщеннях". За замовчуванням marketing
+  // (для зворотної сумісності з викликами, де type ще не передається — Вхідні,
+  // "Надіслати сповіщення" на замовленні — ті насправді сервісні, але поки без type,
+  // пишуться як marketing, доки не оновимо виклики).
+  const notifType: "marketing" | "service" = type === "service" ? "service" : "marketing";
 
   const apiSecret = process.env.PUSH_WORKER_API_SECRET;
   if (!apiSecret) {
@@ -71,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let batchCount = 0;
       for (const uid of targetUserIds) {
         const ref = db.collection("notifications").doc(uid).collection("messages").doc();
-        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt });
+        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt, type: notifType });
         batchCount++;
         if (batchCount >= 400) {
           await batch.commit();
