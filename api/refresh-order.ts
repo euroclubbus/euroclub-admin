@@ -19,7 +19,7 @@ function getAdminApp() {
   return initializeApp({ credential: cert(JSON.parse(raw)) });
 }
 
-async function fetchUserOrdersByOid(oid: string): Promise<any[]> {
+async function fetchUserOrdersByOid(oid: string): Promise<{ list: any[]; raw: string; httpStatus: number }> {
   const body = new URLSearchParams({
     work: "work",
     mod: "apimobile",
@@ -33,8 +33,11 @@ async function fetchUserOrdersByOid(oid: string): Promise<any[]> {
     body: body.toString(),
     cache: "no-store",
   });
-  const raw = await res.json();
-  return Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+  const rawText = await res.text();
+  let parsed: any = null;
+  try { parsed = JSON.parse(rawText); } catch { /* нижче обробимо як сиру відповідь */ }
+  const list = Array.isArray(parsed?.data) ? parsed.data : Array.isArray(parsed) ? parsed : [];
+  return { list, raw: rawText, httpStatus: res.status };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -54,11 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getFirestore(app);
     const ref = db.collection("order_registry").doc(orderNo);
 
-    const list = await fetchUserOrdersByOid(orderNo);
+    const { list, raw, httpStatus } = await fetchUserOrdersByOid(orderNo);
     const found = list.find((o: any) => String(o.oid ?? o.hash) === orderNo);
 
     if (!found) {
-      res.status(404).json({ error: "Бекенд не повернув це замовлення (перевір, чи існує такий oid)" });
+      res.status(404).json({ error: `Бекенд не повернув це замовлення. HTTP ${httpStatus}, сира відповідь: ${raw.slice(0, 500)}` });
       return;
     }
 
