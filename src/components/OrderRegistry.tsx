@@ -340,13 +340,11 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
                 </>
               );
             })()}
-            {order.sessionKey ? (
-              <button onClick={refreshFromBackend} disabled={refreshing} style={styles.refreshBtn}>
-                {refreshing ? "Оновлюю…" : "Оновити з бекенду"}
-              </button>
-            ) : (
-              <span style={styles.mutedSmall} title="Немає збереженого токена сесії — це замовлення зроблене до 10.08, коли sessionKey ще не записувався. На відміну від userId/app, sessionKey неможливо отримати заднім числом — це реальний токен сесії, а не поле з відповіді бекенду."> · оновлення недоступне</span>
-            )}
+            {/* Кеп (25.08): oid2user-orders працює для БУДЬ-ЯКОГО oid — умову sessionKey
+                прибрано, кнопка тепер доступна завжди. */}
+            <button onClick={refreshFromBackend} disabled={refreshing} style={styles.refreshBtn}>
+              {refreshing ? "Оновлюю…" : "Оновити з бекенду"}
+            </button>
             {refreshError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{refreshError}</div>}
           </div>
 
@@ -620,7 +618,7 @@ export function OrderRegistry() {
   // фільтрами дату/маршрут/статус спершу), не для всього реєстру одразу — щоб контролювати
   // навантаження на бекенд самому, а не автоматично.
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
-  const [bulkResult, setBulkResult] = useState<{ backendCallsMade: number; updated: number; skippedNoSessionKey: number; notFoundInBackend: number; recoveredViaUserSession: number } | null>(null);
+  const [bulkResult, setBulkResult] = useState<{ backendCallsMade: number; updated: number; notFoundInBackend: number } | null>(null);
   const bulkRefresh = async () => {
     setBulkRefreshing(true);
     setBulkResult(null);
@@ -631,7 +629,7 @@ export function OrderRegistry() {
         body: JSON.stringify({ orderNos: filtered.map((o) => o.orderNo) }),
       });
       const data = await res.json();
-      if (res.ok) setBulkResult({ backendCallsMade: data.backendCallsMade, updated: data.updated, skippedNoSessionKey: data.skippedNoSessionKey ?? 0, notFoundInBackend: data.notFoundInBackend ?? 0, recoveredViaUserSession: data.recoveredViaUserSession ?? 0 });
+      if (res.ok) setBulkResult({ backendCallsMade: data.backendCallsMade, updated: data.updated, notFoundInBackend: data.notFoundInBackend ?? 0 });
     } catch {
       /* мовчки — кнопка просто лишиться доступною для повтору */
     } finally {
@@ -768,7 +766,7 @@ export function OrderRegistry() {
           </button>
           {bulkResult && (
             <span style={styles.summaryDot}>
-              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду{bulkResult.recoveredViaUserSession > 0 ? ` · ${bulkResult.recoveredViaUserSession} підхоплено через user_sessions` : ''}{bulkResult.skippedNoSessionKey > 0 ? ` · ${bulkResult.skippedNoSessionKey} без будь-якого sessionKey` : ''}{bulkResult.notFoundInBackend > 0 ? ` · ${bulkResult.notFoundInBackend} не знайдено на бекенді` : ''}
+              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду{bulkResult.notFoundInBackend > 0 ? ` · ${bulkResult.notFoundInBackend} не знайдено на бекенді` : ''}
             </span>
           )}
         </div>
@@ -806,7 +804,7 @@ export function OrderRegistry() {
           </button>
           {bulkResult && (
             <span style={styles.summaryDot}>
-              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду{bulkResult.recoveredViaUserSession > 0 ? ` · ${bulkResult.recoveredViaUserSession} підхоплено через user_sessions` : ''}{bulkResult.skippedNoSessionKey > 0 ? ` · ${bulkResult.skippedNoSessionKey} без будь-якого sessionKey` : ''}{bulkResult.notFoundInBackend > 0 ? ` · ${bulkResult.notFoundInBackend} не знайдено на бекенді` : ''}
+              {bulkResult.updated} оновлено · {bulkResult.backendCallsMade} запитів до бекенду{bulkResult.notFoundInBackend > 0 ? ` · ${bulkResult.notFoundInBackend} не знайдено на бекенді` : ''}
             </span>
           )}
         </div>
