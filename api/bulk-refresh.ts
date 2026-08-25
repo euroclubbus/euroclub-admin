@@ -11,7 +11,7 @@ import { getFirestore } from "firebase-admin/firestore";
 // група (сам собі pivot, метод працює для будь-якого oid однаково).
 
 const BACKEND_URL = "https://eclub.com.ua/input.php";
-const DMNKEY = process.env.BACKEND_DMNKEY || "\"O?m9)r6Ufrcg[L;9URn(2-3I$+tL£n!l<r.DfJ[LM";
+const DMNKEY = process.env.BACKEND_DMNKEY || "FTP3\"O?m9)r6Ufrcg[L;9URn(2-3I$+tL£n!l<r.DfJ[LM";
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
