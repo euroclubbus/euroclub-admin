@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { Check, ChevronDown, ChevronRight, History, Plus, Search, X } from "lucide-react";
 import { db } from "../lib/firebase";
@@ -619,14 +619,14 @@ export function OrderRegistry() {
   // навантаження на бекенд самому, а не автоматично.
   const [bulkRefreshing, setBulkRefreshing] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ backendCallsMade: number; updated: number; notFoundInBackend: number } | null>(null);
-  const bulkRefresh = async () => {
+  const bulkRefresh = async (orderNosOverride?: string[]) => {
     setBulkRefreshing(true);
     setBulkResult(null);
     try {
       const res = await fetch("/api/bulk-refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNos: filtered.map((o) => o.orderNo) }),
+        body: JSON.stringify({ orderNos: orderNosOverride ?? filtered.map((o) => o.orderNo) }),
       });
       const data = await res.json();
       if (res.ok) setBulkResult({ backendCallsMade: data.backendCallsMade, updated: data.updated, notFoundInBackend: data.notFoundInBackend ?? 0 });
@@ -636,6 +636,21 @@ export function OrderRegistry() {
       setBulkRefreshing(false);
     }
   };
+
+  // Кеп (25.08): раніше "Оновити" було лише за ручним кліком (щоб контролювати
+  // навантаження, поки метод залежав від sessionKey живих сесій). Тепер, коли є прямий
+  // адмінський метод (oid2user-orders, без залежності від сесій юзерів), дані підтягуються
+  // АВТОМАТИЧНО одразу при відкритті сторінки — ручна кнопка лишається для повторного
+  // оновлення пізніше. Спрацьовує рівно один раз за сесію вкладки, як тільки список
+  // замовлень уперше завантажився з Firestore.
+  const autoRefreshedRef = useRef(false);
+  useEffect(() => {
+    if (!loading && orders.length > 0 && !autoRefreshedRef.current) {
+      autoRefreshedRef.current = true;
+      bulkRefresh(orders.map((o) => o.orderNo).slice(0, 500));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, orders.length]);
 
   return (
     <div>
@@ -761,7 +776,7 @@ export function OrderRegistry() {
         <div style={{ ...styles.summaryBar, marginTop: 0, marginBottom: 16 }}>
           <span><strong>{summary.total}</strong> замовлень у списку</span>
           <span style={{ flex: 1 }} />
-          <button onClick={bulkRefresh} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по сесії юзера">
+          <button onClick={() => bulkRefresh()} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId">
             {bulkRefreshing ? "Оновлюю…" : `Оновити ці ${summary.total}`}
           </button>
           {bulkResult && (
@@ -799,7 +814,7 @@ export function OrderRegistry() {
           <span style={styles.summaryDot}>·</span>
           <span>{summary.passengers} пасажирів</span>
           <span style={{ flex: 1 }} />
-          <button onClick={bulkRefresh} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по сесії юзера">
+          <button onClick={() => bulkRefresh()} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId">
             {bulkRefreshing ? "Оновлюю…" : `Оновити ці ${summary.total}`}
           </button>
           {bulkResult && (
