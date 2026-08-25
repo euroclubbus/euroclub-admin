@@ -119,7 +119,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       results.push(...batchResults);
     }
 
-    let totalOrders = 0;
     let totalTickets = 0;
     let appOrders = 0;
     let androidOrders = 0;
@@ -133,12 +132,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const ordersInRange = orders.filter((o) => inRange(o) && matchesStatus(o));
       if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні/статусі
       usersInRange++;
-      totalOrders += ordersInRange.length;
       for (const o of ordersInRange) {
-        totalTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
         const appVal = String(o.app ?? "");
-        if (appVal === "1") { appOrders++; androidOrders++; }
-        else if (appVal === "2") { appOrders++; iphoneOrders++; }
+        if (appVal === "1" || appVal === "2") {
+          // Кеп (25.08): рахуємо ТІЛЬКИ замовлення й квитки з додатку — не всі канали.
+          appOrders++;
+          totalTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
+          if (appVal === "1") androidOrders++; else iphoneOrders++;
+        }
       }
       const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
       const first = sorted[0]; // АБСОЛЮТНО перше замовлення за все життя юзера (не тільки в діапазоні) —
@@ -150,7 +151,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json({
       totalUsers: usersInRange,
       usersWithNoData,
-      totalOrders,
       totalTickets,
       appOrders,
       androidOrders,
