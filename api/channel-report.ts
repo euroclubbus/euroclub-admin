@@ -140,8 +140,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (appVal === "1") { appOrders++; androidOrders++; }
         else if (appVal === "2") { appOrders++; iphoneOrders++; }
       }
-      const sorted = [...ordersInRange].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
-      const first = sorted[0];
+      const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
+      const first = sorted[0]; // АБСОЛЮТНО перше замовлення за все життя юзера (не тільки в діапазоні) —
+      // юзер уже кваліфікований як "активний у цьому періоді" (ordersInRange.length > 0 вище).
       const firstApp = String(first?.app ?? "");
       if (firstApp === "1" || firstApp === "2") usersFirstFromApp++;
     }
