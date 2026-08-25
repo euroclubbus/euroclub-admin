@@ -4,7 +4,6 @@ import { RefreshCw } from "lucide-react";
 interface ReportData {
   totalUsers: number;
   usersWithNoData: number;
-  totalOrders: number;
   totalTickets: number;
   appOrders: number;
   androidOrders: number;
@@ -46,9 +45,8 @@ export function ChannelReport() {
   const rows = data
     ? [
         { label: "Кількість користувачів", value: data.totalUsers },
-        { label: "Кількість замовлень усього", value: data.totalOrders },
-        { label: "Кількість квитків усього", value: data.totalTickets },
         { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} · iPhone: ${data.iphoneOrders})` },
+        { label: "Кількість квитків з додатку", value: data.totalTickets },
         { label: "Юзерів, де застосунок був ПЕРШИМ каналом за все життя (серед активних у цьому періоді)", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
         { label: "Без відповіді від бекенду", value: data.usersWithNoData },
       ]
