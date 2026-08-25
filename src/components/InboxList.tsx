@@ -48,6 +48,7 @@ function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () =
           body: reply.trim(),
           userIds: [thread.userId],
           silent: true,
+          type: "service", // особиста відповідь у треді — транзакційне, не маркетинг
         }),
       }).catch(() => {
         // якщо push не долетів — повідомлення все одно збережене в треді, юзер побачить при вході
