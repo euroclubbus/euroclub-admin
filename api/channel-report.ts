@@ -57,6 +57,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Кеп (25.08): опційний діапазон дат (YYYY-MM-DD, як з <input type="date">) — якщо
+  // задано, у метрики й у визначення "першого каналу" йдуть тільки замовлення юзера, чия
+  // дата (поле "date" з бекенду) потрапляє в цей діапазон. Юзери без жодного замовлення
+  // в діапазоні просто не враховуються в жодній цифрі цього звіту.
+  const { dateFrom, dateTo } = req.body ?? {};
+  const hasRange = typeof dateFrom === "string" && dateFrom.length > 0 || typeof dateTo === "string" && dateTo.length > 0;
+
+  function orderDateISO(o: any): string {
+    const m = String(o?.date ?? "").match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    if (!m) return "";
+    return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+  function inRange(o: any): boolean {
+    if (!hasRange) return true;
+    const iso = orderDateISO(o);
+    if (!iso) return false;
+    if (dateFrom && iso < dateFrom) return false;
+    if (dateTo && iso > dateTo) return false;
+    return true;
+  }
+
   try {
     const app = getAdminApp();
     const db = getFirestore(app);
@@ -95,24 +116,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let iphoneOrders = 0;
     let usersFirstFromApp = 0;
     let usersWithNoData = 0;
+    let usersInRange = 0;
 
     for (const { orders } of results) {
       if (orders.length === 0) { usersWithNoData++; continue; }
-      totalOrders += orders.length;
-      for (const o of orders) {
+      const ordersInRange = orders.filter(inRange);
+      if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні
+      usersInRange++;
+      totalOrders += ordersInRange.length;
+      for (const o of ordersInRange) {
         totalTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
         const appVal = String(o.app ?? "");
         if (appVal === "1") { appOrders++; androidOrders++; }
         else if (appVal === "2") { appOrders++; iphoneOrders++; }
       }
-      const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
+      const sorted = [...ordersInRange].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
       const first = sorted[0];
       const firstApp = String(first?.app ?? "");
       if (firstApp === "1" || firstApp === "2") usersFirstFromApp++;
     }
 
     res.status(200).json({
-      totalUsers: userIds.length,
+      totalUsers: usersInRange,
       usersWithNoData,
       totalOrders,
       totalTickets,
@@ -121,6 +146,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       iphoneOrders,
       usersFirstFromApp,
       generatedAt: new Date().toISOString(),
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
     });
   } catch (err) {
     console.error("channel-report error:", err);
