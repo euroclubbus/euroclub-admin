@@ -61,8 +61,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // задано, у метрики й у визначення "першого каналу" йдуть тільки замовлення юзера, чия
   // дата (поле "date" з бекенду) потрапляє в цей діапазон. Юзери без жодного замовлення
   // в діапазоні просто не враховуються в жодній цифрі цього звіту.
-  const { dateFrom, dateTo } = req.body ?? {};
+  const { dateFrom, dateTo, statusFilter } = req.body ?? {};
   const hasRange = typeof dateFrom === "string" && dateFrom.length > 0 || typeof dateTo === "string" && dateTo.length > 0;
+  const status: "all" | "paid" | "unpaid" | "cancelled" = ["paid", "unpaid", "cancelled"].includes(statusFilter) ? statusFilter : "all";
 
   function orderDateISO(o: any): string {
     const m = String(o?.date ?? "").match(/(\d{2})\.(\d{2})\.(\d{4})/);
@@ -76,6 +77,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (dateFrom && iso < dateFrom) return false;
     if (dateTo && iso > dateTo) return false;
     return true;
+  }
+  // Та сама класифікація, що й у Реєстрі замовлень (OrderRegistry.tsx): 0 = скасовано,
+  // 2/3 = оплачено, інакше = очікує оплати.
+  function matchesStatus(o: any): boolean {
+    if (status === "all") return true;
+    const n = Number(o?.status);
+    if (status === "cancelled") return n === 0;
+    if (status === "paid") return n === 2 || n === 3;
+    return n !== 0 && n !== 2 && n !== 3; // unpaid
   }
 
   try {
@@ -120,8 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const { orders } of results) {
       if (orders.length === 0) { usersWithNoData++; continue; }
-      const ordersInRange = orders.filter(inRange);
-      if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні
+      const ordersInRange = orders.filter((o) => inRange(o) && matchesStatus(o));
+      if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні/статусі
       usersInRange++;
       totalOrders += ordersInRange.length;
       for (const o of ordersInRange) {
@@ -148,6 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       generatedAt: new Date().toISOString(),
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
+      statusFilter: status,
     });
   } catch (err) {
     console.error("channel-report error:", err);
