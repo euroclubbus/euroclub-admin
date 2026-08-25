@@ -13,11 +13,13 @@ interface ReportData {
   generatedAt: string;
   dateFrom: string | null;
   dateTo: string | null;
+  statusFilter: "all" | "paid" | "unpaid" | "cancelled";
 }
 
 export function ChannelReport() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid" | "cancelled">("all");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -29,7 +31,7 @@ export function ChannelReport() {
       const res = await fetch("/api/channel-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }),
+        body: JSON.stringify({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, statusFilter }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Невідома помилка");
@@ -65,6 +67,23 @@ export function ChannelReport() {
         </p>
       </header>
 
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {([
+          { key: "all", label: "Усі" },
+          { key: "paid", label: "Оплачені" },
+          { key: "unpaid", label: "Очікують оплати" },
+          { key: "cancelled", label: "Скасовані" },
+        ] as const).map((o) => (
+          <button
+            key={o.key}
+            onClick={() => setStatusFilter(o.key)}
+            style={{ ...statusChip, ...(statusFilter === o.key ? statusChipActive : {}) }}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Період:</span>
         <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={dateInput} />
@@ -98,6 +117,7 @@ export function ChannelReport() {
           </table>
           <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-faint)" }}>
             {(data.dateFrom || data.dateTo) && <>Період: {data.dateFrom || "…"} — {data.dateTo || "…"} · </>}
+            {data.statusFilter !== "all" && <>Статус: {{ paid: "оплачені", unpaid: "очікують оплати", cancelled: "скасовані" }[data.statusFilter]} · </>}
             Сформовано: {new Date(data.generatedAt).toLocaleString("uk-UA")}
           </div>
         </>
@@ -128,6 +148,23 @@ const dateInput: React.CSSProperties = {
   padding: "7px 10px",
   fontSize: 13,
   color: "var(--text)",
+};
+
+const statusChip: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--hairline)",
+  borderRadius: 20,
+  padding: "7px 16px",
+  fontSize: 13,
+  color: "var(--text-muted)",
+  cursor: "pointer",
+};
+
+const statusChipActive: React.CSSProperties = {
+  background: "var(--amber)",
+  borderColor: "var(--amber)",
+  color: "#1a1305",
+  fontWeight: 600,
 };
 
 const clearBtn: React.CSSProperties = {
