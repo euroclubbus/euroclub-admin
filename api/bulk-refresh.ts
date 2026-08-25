@@ -2,15 +2,16 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-// Масове "Оновити" для відфільтрованого списку (Кеп, 17.08): замовлень стане багато, і
-// по одному через api/refresh-order.ts — це забагато запитів на бекенд. Тут — та сама
-// ідея (sessionKey з order_registry → один запит user-orders на сервері), але з
-// ДЕДУПЛІКАЦІЄЮ по sessionKey: якщо той самий юзер зробив 5 замовлень з обраного діапазону
-// — це ОДИН запит до бекенду (user-orders повертає всю його історію одразу), а не 5.
-// Ініціюється вручну з адмінки, для конкретного відфільтрованого діапазону (дата/маршрут/
-// статус) — НЕ автоматично й НЕ для всього реєстру одразу.
+// ПЕРЕРОБЛЕНО (25.08, Кеп): прогер дав справжній адмін-метод — oid2user-orders. Будь-який
+// oid → повна історія юзера, адмінським ключем, без sessionKey/user_sessions взагалі. Це
+// повністю замінює попередній підхід (10-18.08, Варіант C) — той був обхідним рішенням,
+// поки такого методу не було. Дедуплікація тепер по userId (якщо вже відомий із
+// попереднього синку) — один запит на юзера, незалежно від кількості його замовлень у
+// вибірці. Якщо userId ще невідомий для якогось orderNo — той оброблюється як окрема
+// група (сам собі pivot, метод працює для будь-якого oid однаково).
 
-const WORKER = "https://curly-voice-8a71.eclubbus21.workers.dev";
+const BACKEND_URL = "https://eclub.com.ua/input.php";
+const DMNKEY = process.env.BACKEND_DMNKEY || "\"O?m9)r6Ufrcg[L;9URn(2-3I$+tL£n!l<r.DfJ[LM";
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -19,17 +20,15 @@ function getAdminApp() {
   return initializeApp({ credential: cert(JSON.parse(raw)) });
 }
 
-async function fetchUserOrders(sessionKey: string): Promise<any[]> {
+async function fetchUserOrdersByOid(oid: string): Promise<any[]> {
   const body = new URLSearchParams({
     work: "work",
-    app: "1",
-    lng: "uk",
-    uidkey: sessionKey,
     mod: "apimobile",
-    opr: "user-orders",
-    _ts: String(Date.now()),
+    dmnkey: DMNKEY,
+    opr: "oid2user-orders",
+    oid2user: oid,
   });
-  const res = await fetch(`${WORKER}/input`, {
+  const res = await fetch(BACKEND_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -62,79 +61,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const refs = orderNos.map((oid: string) => db.collection("order_registry").doc(oid));
     const snaps = await db.getAll(...refs);
 
-    // Кеп (18.08): якщо в самого замовлення немає sessionKey — пробуємо "живий" ключ цього
-    // ж юзера з user_sessions/{userId} (записується там щоразу, коли юзер щось відкриває
-    // в застосунку — не лише при бронюванні). Це і закриває проблему "160 старих замовлень
-    // без sessionKey" — досить, щоб той юзер БУДЬ-КОЛИ відкрив застосунок останнім часом.
-    type OrderInfo = { orderNo: string; ownSessionKey?: string; userId?: string };
-    const orderInfos: OrderInfo[] = [];
-    const userIdsNeedingLookup = new Set<string>();
+    // Групуємо по userId (якщо вже відомий) — так дедуплікуємо запити для юзерів із
+    // кількома замовленнями у вибірці. Невідомий userId → окрема група (сам собі pivot).
+    const groups = new Map<string, string[]>(); // key: userId АБО "solo:{orderNo}" -> [orderNo,...]
     for (const snap of snaps) {
       if (!snap.exists) continue;
-      const data = snap.data() as { sessionKey?: string; backendUserId?: string; userId?: string };
+      const data = snap.data() as { backendUserId?: string; userId?: string };
       const userId = data.backendUserId ?? data.userId;
-      orderInfos.push({ orderNo: snap.id, ownSessionKey: data.sessionKey, userId });
-      if (!data.sessionKey && userId) userIdsNeedingLookup.add(userId);
+      const key = userId ? `uid:${userId}` : `solo:${snap.id}`;
+      const arr = groups.get(key) ?? [];
+      arr.push(snap.id);
+      groups.set(key, arr);
     }
 
-    const userSessionMap = new Map<string, string>(); // userId -> sessionKey
-    if (userIdsNeedingLookup.size > 0) {
-      const userIds = Array.from(userIdsNeedingLookup);
-      const userRefs = userIds.map((uid) => db.collection("user_sessions").doc(uid));
-      const userSnaps = await db.getAll(...userRefs);
-      userSnaps.forEach((s, i) => {
-        if (s.exists) {
-          const sk = (s.data() as { sessionKey?: string })?.sessionKey;
-          if (sk) userSessionMap.set(userIds[i], sk);
-        }
-      });
-    }
-
-    // Групуємо за ЕФЕКТИВНИМ sessionKey (власний АБО підхоплений з user_sessions).
-    const bySessionKey = new Map<string, string[]>();
-    let skippedNoSessionKey = 0;
-    let recoveredViaUserSession = 0;
-    for (const info of orderInfos) {
-      let effectiveKey = info.ownSessionKey;
-      if (!effectiveKey && info.userId) {
-        effectiveKey = userSessionMap.get(info.userId);
-        if (effectiveKey) recoveredViaUserSession++;
-      }
-      if (!effectiveKey) { skippedNoSessionKey++; continue; }
-      const arr = bySessionKey.get(effectiveKey) ?? [];
-      arr.push(info.orderNo);
-      bySessionKey.set(effectiveKey, arr);
-    }
-
-    const uniqueSessionKeys = Array.from(bySessionKey.keys());
     let updated = 0;
     let notFoundInBackend = 0;
     let writeBatch = db.batch();
     let batchCount = 0;
+    const backendCallsMade = groups.size;
 
-    for (const sessionKey of uniqueSessionKeys) {
-      const orderNosForKey = bySessionKey.get(sessionKey)!;
+    for (const orderNosInGroup of groups.values()) {
+      const pivotOid = orderNosInGroup[0];
       let list: any[] = [];
       try {
-        list = await fetchUserOrders(sessionKey);
+        list = await fetchUserOrdersByOid(pivotOid);
       } catch {
-        continue; // токен застарів чи мережева помилка — пропускаємо цю групу, решта продовжує
+        continue; // мережева помилка — пропускаємо цю групу, решта продовжує
       }
       const byOid = new Map<string, any>();
       for (const o of list) byOid.set(String(o.oid ?? o.hash), o);
 
-      for (const orderNo of orderNosForKey) {
+      for (const orderNo of orderNosInGroup) {
         const found = byOid.get(orderNo);
         if (!found) { notFoundInBackend++; continue; }
         const ref = db.collection("order_registry").doc(orderNo);
-        writeBatch.update(ref, {
+        writeBatch.set(ref, {
           backendStatus: found.status ?? null,
           backendPaidUah: Number(found.paid_uah) || 0,
           backendPaidEur: Number(found.paid_eur) || 0,
           backendSyncedAt: new Date().toISOString(),
           ...(found.app !== undefined && found.app !== null && found.app !== "" ? { backendAppPlatform: String(found.app) } : {}),
           ...(found.user_id !== undefined && found.user_id !== null && found.user_id !== "" ? { backendUserId: String(found.user_id) } : {}),
-        });
+        }, { merge: true });
         updated++;
         batchCount++;
         if (batchCount >= 400) {
@@ -148,11 +116,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(200).json({
       requested: orderNos.length,
-      backendCallsMade: uniqueSessionKeys.length,
+      backendCallsMade,
       updated,
       notFoundInBackend,
-      skippedNoSessionKey,
-      recoveredViaUserSession,
     });
   } catch (err) {
     console.error("bulk-refresh error:", err);
