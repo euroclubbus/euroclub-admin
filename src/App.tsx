@@ -11,6 +11,7 @@ import { InboxList } from "./components/InboxList";
 import { ReportFilters } from "./components/ReportFilters";
 import { OrderRegistry } from "./components/OrderRegistry";
 import { MarketingDashboard } from "./components/MarketingDashboard";
+import { ChannelReport } from "./components/ChannelReport";
 import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
 
 export default function App() {
@@ -70,6 +71,8 @@ export default function App() {
         <OrderRegistry />
       ) : tab === "marketing" ? (
         <MarketingDashboard />
+      ) : tab === "channel" ? (
+        <ChannelReport />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>
