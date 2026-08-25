@@ -6,7 +6,7 @@ interface Result {
   message: string;
 }
 
-export function PushForm({ onSent }: { onSent: () => void }) {
+export function PushForm({ onSent, notifType }: { onSent: () => void; notifType: "marketing" | "service" }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [deepLink, setDeepLink] = useState("");
@@ -27,6 +27,7 @@ export function PushForm({ onSent }: { onSent: () => void }) {
           title: title.trim(),
           body: body.trim(),
           deepLink: deepLink.trim() || undefined,
+          type: notifType,
         }),
       });
       const data = await res.json();
