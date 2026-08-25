@@ -17,6 +17,7 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [tab, setTab] = useState<Tab>("push");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [pushSection, setPushSection] = useState<"marketing" | "service">("marketing");
 
   if (!unlocked) {
     return <PasswordGate onUnlock={() => setUnlocked(true)} />;
@@ -29,11 +30,27 @@ export default function App() {
           <header style={{ marginBottom: 24 }}>
             <h1 style={headerTitle}>Push-розсилки</h1>
             <p style={headerSubtitle}>
-              Сповіщення йдуть одразу всім пристроям з увімкненими push у додатку.
+              Сповіщення йдуть одразу всім пристроям з увімкненими push у додатку. Маркетингова —
+              загальні акції/новини. Сервісна — транзакційні (по замовленню/рейсу), позначаються
+              червоною міткою в "Моїх сповіщеннях" юзера.
             </p>
           </header>
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            <button
+              onClick={() => setPushSection("marketing")}
+              style={{ ...tabChip, ...(pushSection === "marketing" ? tabChipActive : {}) }}
+            >
+              Маркетингова
+            </button>
+            <button
+              onClick={() => setPushSection("service")}
+              style={{ ...tabChip, ...(pushSection === "service" ? tabChipActive : {}) }}
+            >
+              Сервісна
+            </button>
+          </div>
           <div style={{ marginBottom: 32 }}>
-            <PushForm onSent={() => setRefreshKey((k) => k + 1)} />
+            <PushForm key={pushSection} onSent={() => setRefreshKey((k) => k + 1)} notifType={pushSection} />
           </div>
           <PushHistory refreshKey={refreshKey} />
         </div>
@@ -78,4 +95,21 @@ const headerSubtitle: React.CSSProperties = {
   fontSize: 13,
   marginTop: 6,
   maxWidth: 460,
+};
+
+const tabChip: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--hairline)",
+  borderRadius: 20,
+  padding: "7px 16px",
+  fontSize: 13,
+  color: "var(--text-muted)",
+  cursor: "pointer",
+};
+
+const tabChipActive: React.CSSProperties = {
+  background: "var(--amber)",
+  borderColor: "var(--amber)",
+  color: "#1a1305",
+  fontWeight: 600,
 };
