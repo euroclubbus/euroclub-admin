@@ -11,9 +11,13 @@ interface ReportData {
   iphoneOrders: number;
   usersFirstFromApp: number;
   generatedAt: string;
+  dateFrom: string | null;
+  dateTo: string | null;
 }
 
 export function ChannelReport() {
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +26,11 @@ export function ChannelReport() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/channel-report", { method: "POST" });
+      const res = await fetch("/api/channel-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }),
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Невідома помилка");
       setData(json);
@@ -33,6 +41,17 @@ export function ChannelReport() {
     }
   }
 
+  const rows = data
+    ? [
+        { label: "Кількість користувачів", value: data.totalUsers },
+        { label: "Кількість замовлень усього", value: data.totalOrders },
+        { label: "Кількість квитків усього", value: data.totalTickets },
+        { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} · iPhone: ${data.iphoneOrders})` },
+        { label: "Юзерів, де застосунок був першим каналом", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
+        { label: "Без відповіді від бекенду", value: data.usersWithNoData },
+      ]
+    : [];
+
   return (
     <div>
       <header style={{ marginBottom: 24 }}>
@@ -40,9 +59,23 @@ export function ChannelReport() {
         <p style={headerSubtitle}>
           Для кожного відомого нам userId забирається ПОВНА історія замовлень (усі канали —
           сайт, менеджер, застосунок), не тільки те, що є в нашому реєстрі. Один запит на
-          унікального юзера.
+          унікального юзера. Діапазон дат фільтрує замовлення за полем "дата" з бекенду —
+          "перший канал" визначається як найперше замовлення юзера В МЕЖАХ обраного
+          діапазону (не обов'язково перше за все життя, якщо діапазон звужено).
         </p>
       </header>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Період:</span>
+        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={dateInput} />
+        <span style={{ color: "var(--text-faint)" }}>—</span>
+        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={dateInput} />
+        {(dateFrom || dateTo) && (
+          <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={clearBtn}>
+            Скинути
+          </button>
+        )}
+      </div>
 
       <button onClick={run} disabled={loading} style={runBtn}>
         <RefreshCw size={15} strokeWidth={2.5} />
@@ -52,26 +85,23 @@ export function ChannelReport() {
       {error && <div style={errorBox}>{error}</div>}
 
       {data && (
-        <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <Stat label="Користувачів" value={data.totalUsers} />
-          <Stat label="Замовлень усього" value={data.totalOrders} />
-          <Stat label="Квитків усього" value={data.totalTickets} />
-          <Stat label="Замовлень з додатку" value={data.appOrders} sub={`Android: ${data.androidOrders} · iPhone: ${data.iphoneOrders}`} />
-          <Stat label="Юзерів, де застосунок був ПЕРШИМ каналом" value={data.usersFirstFromApp} highlight sub={data.totalUsers > 0 ? `${Math.round((data.usersFirstFromApp / data.totalUsers) * 100)}% від усіх юзерів` : undefined} />
-          {data.usersWithNoData > 0 && <Stat label="Без відповіді від бекенду" value={data.usersWithNoData} />}
-        </div>
+        <>
+          <table style={table}>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.label} style={tr}>
+                  <td style={tdLabel}>{r.label}</td>
+                  <td style={tdValue}>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-faint)" }}>
+            {(data.dateFrom || data.dateTo) && <>Період: {data.dateFrom || "…"} — {data.dateTo || "…"} · </>}
+            Сформовано: {new Date(data.generatedAt).toLocaleString("uk-UA")}
+          </div>
+        </>
       )}
-      {data && <div style={{ marginTop: 16, fontSize: 12, color: "var(--text-faint)" }}>Сформовано: {new Date(data.generatedAt).toLocaleString("uk-UA")}</div>}
-    </div>
-  );
-}
-
-function Stat({ label, value, sub, highlight }: { label: string; value: number; sub?: string; highlight?: boolean }) {
-  return (
-    <div style={{ ...statCard, ...(highlight ? statCardHighlight : {}) }}>
-      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: highlight ? "var(--amber)" : "var(--text)" }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
@@ -88,7 +118,26 @@ const headerSubtitle: React.CSSProperties = {
   color: "var(--text-muted)",
   fontSize: 13,
   marginTop: 6,
-  maxWidth: 520,
+  maxWidth: 560,
+};
+
+const dateInput: React.CSSProperties = {
+  background: "var(--surface)",
+  border: "1px solid var(--hairline)",
+  borderRadius: 6,
+  padding: "7px 10px",
+  fontSize: 13,
+  color: "var(--text)",
+};
+
+const clearBtn: React.CSSProperties = {
+  background: "none",
+  border: "1px solid var(--hairline)",
+  borderRadius: 6,
+  padding: "6px 12px",
+  fontSize: 12,
+  color: "var(--text-muted)",
+  cursor: "pointer",
 };
 
 const runBtn: React.CSSProperties = {
@@ -114,14 +163,30 @@ const errorBox: React.CSSProperties = {
   fontSize: 13,
 };
 
-const statCard: React.CSSProperties = {
+const table: React.CSSProperties = {
+  marginTop: 24,
+  width: "100%",
+  borderCollapse: "collapse",
   background: "var(--surface)",
   border: "1px solid var(--hairline)",
   borderRadius: "var(--radius)",
-  padding: 18,
+  overflow: "hidden",
 };
 
-const statCardHighlight: React.CSSProperties = {
-  borderColor: "var(--amber)",
-  gridColumn: "1 / -1",
+const tr: React.CSSProperties = {
+  borderBottom: "1px solid var(--hairline)",
+};
+
+const tdLabel: React.CSSProperties = {
+  padding: "14px 18px",
+  fontSize: 14,
+  color: "var(--text-muted)",
+};
+
+const tdValue: React.CSSProperties = {
+  padding: "14px 18px",
+  fontSize: 16,
+  fontWeight: 700,
+  color: "var(--text)",
+  textAlign: "right",
 };
