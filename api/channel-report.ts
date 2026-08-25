@@ -126,12 +126,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let usersFirstFromApp = 0;
     let usersWithNoData = 0;
     let usersInRange = 0;
+    let existingUsersNowUsingApp = 0; // раніше купували НЕ через додаток, у цьому періоді — купують і через нього
 
     for (const { orders } of results) {
       if (orders.length === 0) { usersWithNoData++; continue; }
       const ordersInRange = orders.filter((o) => inRange(o) && matchesStatus(o));
       if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні/статусі
       usersInRange++;
+      let hasAppOrderInRange = false;
       for (const o of ordersInRange) {
         const appVal = String(o.app ?? "");
         if (appVal === "1" || appVal === "2") {
@@ -139,13 +141,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           appOrders++;
           totalTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
           if (appVal === "1") androidOrders++; else iphoneOrders++;
+          hasAppOrderInRange = true;
         }
       }
       const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
       const first = sorted[0]; // АБСОЛЮТНО перше замовлення за все життя юзера (не тільки в діапазоні) —
       // юзер уже кваліфікований як "активний у цьому періоді" (ordersInRange.length > 0 вище).
       const firstApp = String(first?.app ?? "");
-      if (firstApp === "1" || firstApp === "2") usersFirstFromApp++;
+      const isNewFromApp = firstApp === "1" || firstApp === "2";
+      if (isNewFromApp) usersFirstFromApp++;
+      // Кеп (25.08): "старий" клієнт (перше замовлення НЕ через додаток), який У ЦЬОМУ
+      // ПЕРІОДІ хоч раз купив через додаток — тобто перейшов на новий канал.
+      else if (hasAppOrderInRange) existingUsersNowUsingApp++;
     }
 
     res.status(200).json({
@@ -156,6 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       androidOrders,
       iphoneOrders,
       usersFirstFromApp,
+      existingUsersNowUsingApp,
       generatedAt: new Date().toISOString(),
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
