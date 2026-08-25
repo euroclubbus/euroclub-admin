@@ -108,6 +108,7 @@ export function ReportFilters() {
           title: pushTitle.trim(),
           body: pushBody.trim(),
           userIds: filteredUsers.map((u) => u.userId),
+          type: "marketing", // сегментована розсилка по патернах поїздок — маркетинг
         }),
       });
       const data = await res.json();
