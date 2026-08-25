@@ -9,6 +9,7 @@ interface ReportData {
   androidOrders: number;
   iphoneOrders: number;
   usersFirstFromApp: number;
+  existingUsersNowUsingApp: number;
   generatedAt: string;
   dateFrom: string | null;
   dateTo: string | null;
@@ -47,7 +48,8 @@ export function ChannelReport() {
         { label: "Кількість користувачів", value: data.totalUsers },
         { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} · iPhone: ${data.iphoneOrders})` },
         { label: "Кількість квитків з додатку", value: data.totalTickets },
-        { label: "Юзерів, де застосунок був ПЕРШИМ каналом за все життя (серед активних у цьому періоді)", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
+        { label: "Нових юзерів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
+        { label: "Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього", value: `${data.existingUsersNowUsingApp} (${data.totalUsers > 0 ? Math.round((data.existingUsersNowUsingApp / data.totalUsers) * 100) : 0}%)` },
         { label: "Без відповіді від бекенду", value: data.usersWithNoData },
       ]
     : [];
