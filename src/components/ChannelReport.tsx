@@ -6,6 +6,9 @@ interface ReportData {
   usersWithNoData: number;
   totalTickets: number;
   appOrders: number;
+  appOrdersPaid: number;
+  appOrdersUnpaid: number;
+  appOrdersCancelled: number;
   androidOrders: number;
   iphoneOrders: number;
   usersFirstFromApp: number;
@@ -13,14 +16,12 @@ interface ReportData {
   generatedAt: string;
   dateFrom: string | null;
   dateTo: string | null;
-  statusFilter: "all" | "paid" | "unpaid" | "cancelled";
   failureSamples: { userId: string; pivotOid: string; httpStatus?: number; raw?: string; error?: string }[];
 }
 
 export function ChannelReport() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid" | "cancelled">("all");
   // Кеп (26.08): власний тестовий акаунт (eclubbus21@gmail.com, userId 187728) — не мав
   // потрапляти в статистику. Поле, а не хардкод, щоб потім самому додавати інші тестові
   // акаунти без нашого втручання.
@@ -39,7 +40,6 @@ export function ChannelReport() {
         body: JSON.stringify({
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
-          statusFilter,
           excludeUserIds: excludeUserIds.split(",").map((s) => s.trim()).filter(Boolean),
         }),
       });
@@ -57,6 +57,9 @@ export function ChannelReport() {
     ? [
         { label: "Кількість користувачів", value: data.totalUsers },
         { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} · iPhone: ${data.iphoneOrders})` },
+        { label: "— з них оплачені", value: data.appOrdersPaid },
+        { label: "— з них очікують оплати", value: data.appOrdersUnpaid },
+        { label: "— з них скасовані", value: data.appOrdersCancelled },
         { label: "Кількість квитків з додатку", value: data.totalTickets },
         { label: "Нових юзерів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
         { label: "Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього", value: `${data.existingUsersNowUsingApp} (${data.totalUsers > 0 ? Math.round((data.existingUsersNowUsingApp / data.totalUsers) * 100) : 0}%)` },
@@ -71,29 +74,12 @@ export function ChannelReport() {
         <p style={headerSubtitle}>
           Для кожного відомого нам userId забирається ПОВНА історія замовлень (усі канали —
           сайт, менеджер, застосунок), не тільки те, що є в нашому реєстрі. Один запит на
-          унікального юзера. Діапазон дат/статус фільтрують, ЯКІ юзери потрапляють у звіт
-          (мають бодай одне замовлення, що відповідає фільтрам) і які їхні замовлення
-          рахуються в метриках — але "перший канал" завжди рахується як АБСОЛЮТНО перше
-          замовлення юзера за все життя (навіть якщо воно поза обраним діапазоном).
+          унікального юзера. Оплачені/очікують/скасовані рахуються ОДРАЗУ, окремими рядками
+          в цьому самому звіті. Діапазон дат фільтрує, ЯКІ юзери потрапляють у звіт (мають
+          бодай одне замовлення в цьому періоді) — але "перший канал" завжди рахується як
+          АБСОЛЮТНО перше замовлення юзера за все життя (навіть поза обраним діапазоном).
         </p>
       </header>
-
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        {([
-          { key: "all", label: "Усі" },
-          { key: "paid", label: "Оплачені" },
-          { key: "unpaid", label: "Очікують оплати" },
-          { key: "cancelled", label: "Скасовані" },
-        ] as const).map((o) => (
-          <button
-            key={o.key}
-            onClick={() => setStatusFilter(o.key)}
-            style={{ ...statusChip, ...(statusFilter === o.key ? statusChipActive : {}) }}
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Період:</span>
@@ -138,7 +124,6 @@ export function ChannelReport() {
           </table>
           <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-faint)" }}>
             {(data.dateFrom || data.dateTo) && <>Період: {data.dateFrom || "…"} — {data.dateTo || "…"} · </>}
-            {data.statusFilter !== "all" && <>Статус: {{ paid: "оплачені", unpaid: "очікують оплати", cancelled: "скасовані" }[data.statusFilter]} · </>}
             Сформовано: {new Date(data.generatedAt).toLocaleString("uk-UA")}
           </div>
 
@@ -180,23 +165,6 @@ const dateInput: React.CSSProperties = {
   padding: "7px 10px",
   fontSize: 13,
   color: "var(--text)",
-};
-
-const statusChip: React.CSSProperties = {
-  background: "var(--surface)",
-  border: "1px solid var(--hairline)",
-  borderRadius: 20,
-  padding: "7px 16px",
-  fontSize: 13,
-  color: "var(--text-muted)",
-  cursor: "pointer",
-};
-
-const statusChipActive: React.CSSProperties = {
-  background: "var(--amber)",
-  borderColor: "var(--amber)",
-  color: "#1a1305",
-  fontWeight: 600,
 };
 
 const clearBtn: React.CSSProperties = {
