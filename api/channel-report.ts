@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // задано, у метрики й у визначення "першого каналу" йдуть тільки замовлення юзера, чия
   // дата (поле "date" з бекенду) потрапляє в цей діапазон. Юзери без жодного замовлення
   // в діапазоні просто не враховуються в жодній цифрі цього звіту.
-  const { dateFrom, dateTo, statusFilter } = req.body ?? {};
+  const { dateFrom, dateTo, statusFilter, excludeUserIds } = req.body ?? {};
   const hasRange = typeof dateFrom === "string" && dateFrom.length > 0 || typeof dateTo === "string" && dateTo.length > 0;
   const status: "all" | "paid" | "unpaid" | "cancelled" = ["paid", "unpaid", "cancelled"].includes(statusFilter) ? statusFilter : "all";
 
@@ -124,7 +124,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (userId && !userIdToOid.has(userId)) userIdToOid.set(userId, doc.id);
     }
 
-    const userIds = Array.from(userIdToOid.keys());
+    const excludeSet = new Set<string>(Array.isArray(excludeUserIds) ? excludeUserIds.map(String) : []);
+    const userIds = Array.from(userIdToOid.keys()).filter((uid) => !excludeSet.has(uid));
     const results: { userId: string; orders: any[] }[] = [];
     const failureSamples: { userId: string; pivotOid: string; httpStatus?: number; raw?: string; error?: string }[] = [];
 
