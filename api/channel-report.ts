@@ -85,9 +85,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // задано, у метрики й у визначення "першого каналу" йдуть тільки замовлення юзера, чия
   // дата (поле "date" з бекенду) потрапляє в цей діапазон. Юзери без жодного замовлення
   // в діапазоні просто не враховуються в жодній цифрі цього звіту.
-  const { dateFrom, dateTo, statusFilter, excludeUserIds } = req.body ?? {};
+  // Кеп (26.08): статус БІЛЬШЕ НЕ фільтр-перемикач — усі три (оплачені/очікують/скасовані)
+  // рахуються ОДРАЗУ, окремими полями в тому самому звіті.
+  const { dateFrom, dateTo, excludeUserIds } = req.body ?? {};
   const hasRange = typeof dateFrom === "string" && dateFrom.length > 0 || typeof dateTo === "string" && dateTo.length > 0;
-  const status: "all" | "paid" | "unpaid" | "cancelled" = ["paid", "unpaid", "cancelled"].includes(statusFilter) ? statusFilter : "all";
 
   function orderDateISO(o: any): string {
     const m = String(o?.date ?? "").match(/(\d{2})\.(\d{2})\.(\d{4})/);
@@ -104,12 +105,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   // Та сама класифікація, що й у Реєстрі замовлень (OrderRegistry.tsx): 0 = скасовано,
   // 2/3 = оплачено, інакше = очікує оплати.
-  function matchesStatus(o: any): boolean {
-    if (status === "all") return true;
+  function orderStatusBucket(o: any): "paid" | "unpaid" | "cancelled" {
     const n = Number(o?.status);
-    if (status === "cancelled") return n === 0;
-    if (status === "paid") return n === 2 || n === 3;
-    return n !== 0 && n !== 2 && n !== 3; // unpaid
+    if (n === 0) return "cancelled";
+    if (n === 2 || n === 3) return "paid";
+    return "unpaid";
   }
 
   try {
@@ -154,6 +154,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let totalTickets = 0;
     let appOrders = 0;
+    let appOrdersPaid = 0;
+    let appOrdersUnpaid = 0;
+    let appOrdersCancelled = 0;
     let androidOrders = 0;
     let iphoneOrders = 0;
     let usersFirstFromApp = 0;
@@ -163,8 +166,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     for (const { orders } of results) {
       if (orders.length === 0) { usersWithNoData++; continue; }
-      const ordersInRange = orders.filter((o) => inRange(o) && matchesStatus(o));
-      if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні/статусі
+      const ordersInRange = orders.filter(inRange);
+      if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні
       usersInRange++;
       let hasAppOrderInRange = false;
       for (const o of ordersInRange) {
@@ -175,6 +178,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           totalTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
           if (appVal === "1") androidOrders++; else iphoneOrders++;
           hasAppOrderInRange = true;
+          const bucket = orderStatusBucket(o);
+          if (bucket === "paid") appOrdersPaid++;
+          else if (bucket === "cancelled") appOrdersCancelled++;
+          else appOrdersUnpaid++;
         }
       }
       const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
@@ -193,6 +200,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       usersWithNoData,
       totalTickets,
       appOrders,
+      appOrdersPaid,
+      appOrdersUnpaid,
+      appOrdersCancelled,
       androidOrders,
       iphoneOrders,
       usersFirstFromApp,
@@ -200,7 +210,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       generatedAt: new Date().toISOString(),
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
-      statusFilter: status,
       failureSamples,
     });
   } catch (err) {
