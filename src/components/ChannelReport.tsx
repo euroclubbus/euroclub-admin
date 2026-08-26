@@ -100,7 +100,7 @@ export function ChannelReport() {
 
       <button onClick={run} disabled={loading} style={runBtn}>
         <RefreshCw size={15} strokeWidth={2.5} />
-        {loading ? "Рахую… (може зайняти хвилину)" : "Сформувати звіт"}
+        {loading ? "Рахую… (з повторними спробами при перевантаженні бекенду — може зайняти кілька хвилин)" : "Сформувати звіт"}
       </button>
 
       {error && <div style={errorBox}>{error}</div>}
