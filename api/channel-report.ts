@@ -2,10 +2,10 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
-// Багато послідовних запитів до бекенду (по одному на унікального юзера) — типовий ліміт
-// Vercel-функції (10с на Hobby) може не вистачити. Піднімаємо стелю, наскільки дозволяє
-// план (ігнорується на Hobby, спрацює на Pro+).
-export const config = { maxDuration: 60 };
+// Багато послідовних запитів + ретраї (Кеп: потрібні 100% замовлень, не просто "більшість")
+// можуть зайняти довше за типовий ліміт Vercel-функції. Піднімаємо стелю максимально —
+// спрацює настільки, наскільки дозволяє план (ігнорується на Hobby, спрацює на Pro+).
+export const config = { maxDuration: 300 };
 
 // Звіт "ефективність каналу застосунку" (Кеп, 25.08): для кожного УНІКАЛЬНОГО userId,
 // відомого нам (з order_registry), робимо ОДИН запит oid2user-orders (адмінський метод,
@@ -16,7 +16,28 @@ export const config = { maxDuration: 60 };
 
 const BACKEND_URL = "https://eclub.com.ua/input.php";
 const DMNKEY = process.env.BACKEND_DMNKEY || "FTP3\"O?m9)r6Ufrcg[L;9URn(2-3I$+tL£n!l<r.DfJ[LM";
-const CONCURRENCY = 8; // паралельних запитів до бекенду одночасно — не заваливаємо його
+const CONCURRENCY = 3; // Кеп (26.08): 8 перевантажувало базу бекенду (db_connect_err) —
+// зменшено, разом з ретраями нижче.
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Ретраї при db_connect_err (бекенд сам каже "не можу підключитись до бази" — тимчасове,
+// не постійна помилка per-замовлення, підтверджено: усі невдачі в одному запуску мають
+// однаковий час, тобто це наш паралельний потік перевантажує їхню БД у ту секунду).
+// Кеп: "мені треба 100% по всіх замовленнях" — тому повторюємо з паузою, а не здаємось одразу.
+async function fetchUserOrdersByOidWithRetry(oid: string, maxRetries = 4): Promise<{ orders: any[]; raw: string; httpStatus: number }> {
+  let lastResult: { orders: any[]; raw: string; httpStatus: number } | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await fetchUserOrdersByOid(oid);
+    lastResult = result;
+    if (result.orders.length > 0) return result;
+    if (!result.raw.includes("db_connect_err")) return result; // інша причина — не повторюємо навмання
+    if (attempt < maxRetries) await sleep(800 * (attempt + 1)); // 800мс, 1.6с, 2.4с, 3.2с
+  }
+  return lastResult!;
+}
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
@@ -114,7 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         batch.map(async (uid) => {
           const pivotOid = userIdToOid.get(uid)!;
           try {
-            const { orders, raw, httpStatus } = await fetchUserOrdersByOid(pivotOid);
+            const { orders, raw, httpStatus } = await fetchUserOrdersByOidWithRetry(pivotOid);
             if (orders.length === 0 && failureSamples.length < 10) {
               failureSamples.push({ userId: uid, pivotOid, httpStatus, raw: raw.slice(0, 300) });
             }
