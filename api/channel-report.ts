@@ -25,7 +25,7 @@ function getAdminApp() {
   return initializeApp({ credential: cert(JSON.parse(raw)) });
 }
 
-async function fetchUserOrdersByOid(oid: string): Promise<any[]> {
+async function fetchUserOrdersByOid(oid: string): Promise<{ orders: any[]; raw: string; httpStatus: number }> {
   const body = new URLSearchParams({
     work: "work",
     mod: "apimobile",
@@ -39,8 +39,11 @@ async function fetchUserOrdersByOid(oid: string): Promise<any[]> {
     body: body.toString(),
     cache: "no-store",
   });
-  const raw = await res.json();
-  return Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+  const rawText = await res.text();
+  let parsed: any = null;
+  try { parsed = JSON.parse(rawText); } catch { /* нижче обробимо як сиру відповідь */ }
+  const orders = Array.isArray(parsed?.data) ? parsed.data : Array.isArray(parsed) ? parsed : [];
+  return { orders, raw: rawText, httpStatus: res.status };
 }
 
 // "date" з бекенду — формат DD.MM.YYYY. Парсимо для сортування за найранішим замовленням.
@@ -102,16 +105,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userIds = Array.from(userIdToOid.keys());
     const results: { userId: string; orders: any[] }[] = [];
+    const failureSamples: { userId: string; pivotOid: string; httpStatus?: number; raw?: string; error?: string }[] = [];
 
     // Обробляємо пачками по CONCURRENCY, щоб не заваливати бекенд усіма запитами одразу.
     for (let i = 0; i < userIds.length; i += CONCURRENCY) {
       const batch = userIds.slice(i, i + CONCURRENCY);
       const batchResults = await Promise.all(
         batch.map(async (uid) => {
+          const pivotOid = userIdToOid.get(uid)!;
           try {
-            const orders = await fetchUserOrdersByOid(userIdToOid.get(uid)!);
+            const { orders, raw, httpStatus } = await fetchUserOrdersByOid(pivotOid);
+            if (orders.length === 0 && failureSamples.length < 10) {
+              failureSamples.push({ userId: uid, pivotOid, httpStatus, raw: raw.slice(0, 300) });
+            }
             return { userId: uid, orders };
-          } catch {
+          } catch (e) {
+            if (failureSamples.length < 10) {
+              failureSamples.push({ userId: uid, pivotOid, error: e instanceof Error ? e.message : String(e) });
+            }
             return { userId: uid, orders: [] };
           }
         })
@@ -168,6 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
       statusFilter: status,
+      failureSamples,
     });
   } catch (err) {
     console.error("channel-report error:", err);
