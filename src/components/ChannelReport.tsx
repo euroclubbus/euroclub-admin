@@ -14,6 +14,16 @@ interface ReportData {
   appTicketsCancelled: number;
   androidOrders: number;
   iphoneOrders: number;
+  newAppOrders: number;
+  newTotalTickets: number;
+  newAppOrdersPaid: number;
+  newAppOrdersUnpaid: number;
+  newAppOrdersCancelled: number;
+  newAppTicketsPaid: number;
+  newAppTicketsUnpaid: number;
+  newAppTicketsCancelled: number;
+  newAndroidOrders: number;
+  newIphoneOrders: number;
   usersFirstFromApp: number;
   existingUsersNowUsingApp: number;
   generatedAt: string;
@@ -56,33 +66,69 @@ export function ChannelReport() {
     }
   }
 
-  const rows = data
+  const headRows = data
     ? [
         { label: "Кількість користувачів які зробили замовлення", value: data.totalUsers },
         { label: "Нових користувачів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
         { label: "Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього", value: `${data.existingUsersNowUsingApp} (${data.totalUsers > 0 ? Math.round((data.existingUsersNowUsingApp / data.totalUsers) * 100) : 0}%)` },
-        { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} | iPhone: ${data.iphoneOrders})` },
-        { label: "Кількість квитків з додатку", value: data.totalTickets },
-        { label: "— з них оплачені", value: `${data.appOrdersPaid} замовлень | ${data.appTicketsPaid} - квитків` },
-        { label: "— з них очікують оплати", value: `${data.appOrdersUnpaid} | ${data.appTicketsUnpaid} - квитків` },
-        { label: "— з них скасовані", value: `${data.appOrdersCancelled} | ${data.appTicketsCancelled} - квитків` },
-        { label: "Без відповіді від бекенду", value: data.usersWithNoData },
       ]
     : [];
+
+  function blockRows(d: ReportData, kind: "new" | "all") {
+    const orders = kind === "new" ? d.newAppOrders : d.appOrders;
+    const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
+    const android = kind === "new" ? d.newAndroidOrders : d.androidOrders;
+    const iphone = kind === "new" ? d.newIphoneOrders : d.iphoneOrders;
+    const paidO = kind === "new" ? d.newAppOrdersPaid : d.appOrdersPaid;
+    const paidT = kind === "new" ? d.newAppTicketsPaid : d.appTicketsPaid;
+    const unpaidO = kind === "new" ? d.newAppOrdersUnpaid : d.appOrdersUnpaid;
+    const unpaidT = kind === "new" ? d.newAppTicketsUnpaid : d.appTicketsUnpaid;
+    const cancelO = kind === "new" ? d.newAppOrdersCancelled : d.appOrdersCancelled;
+    const cancelT = kind === "new" ? d.newAppTicketsCancelled : d.appTicketsCancelled;
+    return [
+      { label: "Кількість замовлень з додатку", value: `${orders} (Android: ${android} | iPhone: ${iphone})` },
+      { label: "Кількість квитків з додатку", value: tickets },
+      { label: "— з них оплачені", value: `${paidO} замовлень | ${paidT} - квитків` },
+      { label: "— з них очікують оплати", value: `${unpaidO} | ${unpaidT} - квитків` },
+      { label: "— з них скасовані", value: `${cancelO} | ${cancelT} - квитків` },
+    ];
+  }
+
+  const newUsersRows = data ? blockRows(data, "new") : [];
+  const allRows = data ? blockRows(data, "all") : [];
 
   function buildCopyText(d: ReportData): string {
     const pctFirst = d.totalUsers > 0 ? Math.round((d.usersFirstFromApp / d.totalUsers) * 100) : 0;
     const pctExisting = d.totalUsers > 0 ? Math.round((d.existingUsersNowUsingApp / d.totalUsers) * 100) : 0;
+    const block = (kind: "new" | "all") => {
+      const orders = kind === "new" ? d.newAppOrders : d.appOrders;
+      const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
+      const android = kind === "new" ? d.newAndroidOrders : d.androidOrders;
+      const iphone = kind === "new" ? d.newIphoneOrders : d.iphoneOrders;
+      const paidO = kind === "new" ? d.newAppOrdersPaid : d.appOrdersPaid;
+      const paidT = kind === "new" ? d.newAppTicketsPaid : d.appTicketsPaid;
+      const unpaidO = kind === "new" ? d.newAppOrdersUnpaid : d.appOrdersUnpaid;
+      const unpaidT = kind === "new" ? d.newAppTicketsUnpaid : d.appTicketsUnpaid;
+      const cancelO = kind === "new" ? d.newAppOrdersCancelled : d.appOrdersCancelled;
+      const cancelT = kind === "new" ? d.newAppTicketsCancelled : d.appTicketsCancelled;
+      return [
+        `Кількість замовлень з додатку - ${orders} (Android: ${android} | iPhone: ${iphone})`,
+        `Кількість квитків з додатку - ${tickets}`,
+        `— з них оплачені - ${paidO} замовлень | ${paidT} - квитків`,
+        `— з них очікують оплати - ${unpaidO} | ${unpaidT} - квитків`,
+        `— з них скасовані - ${cancelO} | ${cancelT} - квитків`,
+      ].join("\n");
+    };
     return [
       `Кількість користувачів які зробили замовлення - ${d.totalUsers}`,
       `Нових користувачів — перше замовлення взагалі з додатку - ${d.usersFirstFromApp} (${pctFirst}%)`,
       `Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього - ${d.existingUsersNowUsingApp} (${pctExisting}%)`,
       ``,
-      `Кількість замовлень з додатку - ${d.appOrders} (Android: ${d.androidOrders} | iPhone: ${d.iphoneOrders})`,
-      `Кількість квитків з додатку - ${d.totalTickets}`,
-      `— з них оплачені - ${d.appOrdersPaid} замовлень | ${d.appTicketsPaid} - квитків`,
-      `— з них очікують оплати - ${d.appOrdersUnpaid} | ${d.appTicketsUnpaid} - квитків`,
-      `— з них скасовані - ${d.appOrdersCancelled} | ${d.appTicketsCancelled} - квитків`,
+      `НОВІ КОРИСТУВАЧІ:`,
+      block("new"),
+      ``,
+      `УСЬОГО:`,
+      block("all"),
     ].join("\n");
   }
 
@@ -144,9 +190,10 @@ export function ChannelReport() {
           <button onClick={copyReport} style={copyBtn}>
             {copied ? "Скопійовано ✓" : "Копіювати текстом"}
           </button>
+
           <table style={table}>
             <tbody>
-              {rows.map((r) => (
+              {headRows.map((r) => (
                 <tr key={r.label} style={tr}>
                   <td style={tdLabel}>{r.label}</td>
                   <td style={tdValue}>{r.value}</td>
@@ -154,6 +201,35 @@ export function ChannelReport() {
               ))}
             </tbody>
           </table>
+
+          <div style={blockTitle}>Нові користувачі</div>
+          <table style={table}>
+            <tbody>
+              {newUsersRows.map((r) => (
+                <tr key={r.label} style={tr}>
+                  <td style={tdLabel}>{r.label}</td>
+                  <td style={tdValue}>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={blockTitle}>Усього</div>
+          <table style={table}>
+            <tbody>
+              {allRows.map((r) => (
+                <tr key={r.label} style={tr}>
+                  <td style={tdLabel}>{r.label}</td>
+                  <td style={tdValue}>{r.value}</td>
+                </tr>
+              ))}
+              <tr style={tr}>
+                <td style={tdLabel}>Без відповіді від бекенду</td>
+                <td style={tdValue}>{data.usersWithNoData}</td>
+              </tr>
+            </tbody>
+          </table>
+
           <div style={{ marginTop: 12, fontSize: 12, color: "var(--text-faint)" }}>
             {(data.dateFrom || data.dateTo) && <>Період: {data.dateFrom || "…"} — {data.dateTo || "…"} · </>}
             Сформовано: {new Date(data.generatedAt).toLocaleString("uk-UA")}
@@ -244,6 +320,16 @@ const errorBox: React.CSSProperties = {
   borderRadius: "var(--radius)",
   padding: "10px 12px",
   fontSize: 13,
+};
+
+const blockTitle: React.CSSProperties = {
+  marginTop: 20,
+  marginBottom: 8,
+  fontSize: 13,
+  fontWeight: 700,
+  color: "var(--amber)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
 
 const table: React.CSSProperties = {
