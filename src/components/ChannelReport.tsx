@@ -21,6 +21,10 @@ export function ChannelReport() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid" | "cancelled">("all");
+  // Кеп (26.08): власний тестовий акаунт (eclubbus21@gmail.com, userId 187728) — не мав
+  // потрапляти в статистику. Поле, а не хардкод, щоб потім самому додавати інші тестові
+  // акаунти без нашого втручання.
+  const [excludeUserIds, setExcludeUserIds] = useState("187728");
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,7 +36,12 @@ export function ChannelReport() {
       const res = await fetch("/api/channel-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, statusFilter }),
+        body: JSON.stringify({
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          statusFilter,
+          excludeUserIds: excludeUserIds.split(",").map((s) => s.trim()).filter(Boolean),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Невідома помилка");
@@ -96,6 +105,16 @@ export function ChannelReport() {
             Скинути
           </button>
         )}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Виключити userId (через кому):</span>
+        <input
+          value={excludeUserIds}
+          onChange={(e) => setExcludeUserIds(e.target.value)}
+          placeholder="напр. 187728, 331124"
+          style={{ ...dateInput, width: 220 }}
+        />
       </div>
 
       <button onClick={run} disabled={loading} style={runBtn}>
