@@ -14,6 +14,7 @@ interface ReportData {
   dateFrom: string | null;
   dateTo: string | null;
   statusFilter: "all" | "paid" | "unpaid" | "cancelled";
+  failureSamples: { userId: string; pivotOid: string; httpStatus?: number; raw?: string; error?: string }[];
 }
 
 export function ChannelReport() {
@@ -121,6 +122,17 @@ export function ChannelReport() {
             {data.statusFilter !== "all" && <>Статус: {{ paid: "оплачені", unpaid: "очікують оплати", cancelled: "скасовані" }[data.statusFilter]} · </>}
             Сформовано: {new Date(data.generatedAt).toLocaleString("uk-UA")}
           </div>
+
+          {data.failureSamples && data.failureSamples.length > 0 && (
+            <details style={{ marginTop: 20 }}>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--text-muted)" }}>
+                Приклади "без відповіді від бекенду" ({data.failureSamples.length} з {"—"}) — розгорнути для діагностики
+              </summary>
+              <pre style={{ fontSize: 11, background: "var(--surface)", padding: 12, borderRadius: 8, overflow: "auto", maxHeight: 400, marginTop: 8, whiteSpace: "pre-wrap" }}>
+                {JSON.stringify(data.failureSamples, null, 2)}
+              </pre>
+            </details>
+          )}
         </>
       )}
     </div>
