@@ -9,6 +9,9 @@ interface ReportData {
   appOrdersPaid: number;
   appOrdersUnpaid: number;
   appOrdersCancelled: number;
+  appTicketsPaid: number;
+  appTicketsUnpaid: number;
+  appTicketsCancelled: number;
   androidOrders: number;
   iphoneOrders: number;
   usersFirstFromApp: number;
@@ -55,17 +58,43 @@ export function ChannelReport() {
 
   const rows = data
     ? [
-        { label: "Кількість користувачів", value: data.totalUsers },
-        { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} · iPhone: ${data.iphoneOrders})` },
-        { label: "— з них оплачені", value: data.appOrdersPaid },
-        { label: "— з них очікують оплати", value: data.appOrdersUnpaid },
-        { label: "— з них скасовані", value: data.appOrdersCancelled },
-        { label: "Кількість квитків з додатку", value: data.totalTickets },
-        { label: "Нових юзерів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
+        { label: "Кількість користувачів які зробили замовлення", value: data.totalUsers },
+        { label: "Нових користувачів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
         { label: "Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього", value: `${data.existingUsersNowUsingApp} (${data.totalUsers > 0 ? Math.round((data.existingUsersNowUsingApp / data.totalUsers) * 100) : 0}%)` },
+        { label: "Кількість замовлень з додатку", value: `${data.appOrders} (Android: ${data.androidOrders} | iPhone: ${data.iphoneOrders})` },
+        { label: "Кількість квитків з додатку", value: data.totalTickets },
+        { label: "— з них оплачені", value: `${data.appOrdersPaid} замовлень | ${data.appTicketsPaid} - квитків` },
+        { label: "— з них очікують оплати", value: `${data.appOrdersUnpaid} | ${data.appTicketsUnpaid} - квитків` },
+        { label: "— з них скасовані", value: `${data.appOrdersCancelled} | ${data.appTicketsCancelled} - квитків` },
         { label: "Без відповіді від бекенду", value: data.usersWithNoData },
       ]
     : [];
+
+  function buildCopyText(d: ReportData): string {
+    const pctFirst = d.totalUsers > 0 ? Math.round((d.usersFirstFromApp / d.totalUsers) * 100) : 0;
+    const pctExisting = d.totalUsers > 0 ? Math.round((d.existingUsersNowUsingApp / d.totalUsers) * 100) : 0;
+    return [
+      `Кількість користувачів які зробили замовлення - ${d.totalUsers}`,
+      `Нових користувачів — перше замовлення взагалі з додатку - ${d.usersFirstFromApp} (${pctFirst}%)`,
+      `Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього - ${d.existingUsersNowUsingApp} (${pctExisting}%)`,
+      ``,
+      `Кількість замовлень з додатку - ${d.appOrders} (Android: ${d.androidOrders} | iPhone: ${d.iphoneOrders})`,
+      `Кількість квитків з додатку - ${d.totalTickets}`,
+      `— з них оплачені - ${d.appOrdersPaid} замовлень | ${d.appTicketsPaid} - квитків`,
+      `— з них очікують оплати - ${d.appOrdersUnpaid} | ${d.appTicketsUnpaid} - квитків`,
+      `— з них скасовані - ${d.appOrdersCancelled} | ${d.appTicketsCancelled} - квитків`,
+    ].join("\n");
+  }
+
+  const [copied, setCopied] = useState(false);
+  async function copyReport() {
+    if (!data) return;
+    try {
+      await navigator.clipboard.writeText(buildCopyText(data));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* без доступу до буфера — просто нічого не станеться */ }
+  }
 
   return (
     <div>
@@ -112,6 +141,9 @@ export function ChannelReport() {
 
       {data && (
         <>
+          <button onClick={copyReport} style={copyBtn}>
+            {copied ? "Скопійовано ✓" : "Копіювати текстом"}
+          </button>
           <table style={table}>
             <tbody>
               {rows.map((r) => (
@@ -190,6 +222,20 @@ const runBtn: React.CSSProperties = {
   fontWeight: 600,
 };
 
+const copyBtn: React.CSSProperties = {
+  display: "block",
+  marginTop: 24,
+  marginBottom: 10,
+  background: "var(--surface)",
+  border: "1px solid var(--hairline)",
+  borderRadius: "var(--radius)",
+  padding: "9px 16px",
+  fontSize: 13,
+  fontWeight: 600,
+  color: "var(--text)",
+  cursor: "pointer",
+};
+
 const errorBox: React.CSSProperties = {
   marginTop: 16,
   border: "1px solid var(--danger)",
@@ -201,7 +247,6 @@ const errorBox: React.CSSProperties = {
 };
 
 const table: React.CSSProperties = {
-  marginTop: 24,
   width: "100%",
   borderCollapse: "collapse",
   background: "var(--surface)",
