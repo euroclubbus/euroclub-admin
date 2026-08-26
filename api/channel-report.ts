@@ -162,6 +162,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let appTicketsCancelled = 0;
     let androidOrders = 0;
     let iphoneOrders = 0;
+    // Кеп (26.08): той самий набір метрик — але ЛИШЕ для "нових" юзерів (перше замовлення
+    // взагалі з додатку), окремий блок у звіті поруч із "усього".
+    let newTotalTickets = 0;
+    let newAppOrders = 0;
+    let newAppOrdersPaid = 0;
+    let newAppOrdersUnpaid = 0;
+    let newAppOrdersCancelled = 0;
+    let newAppTicketsPaid = 0;
+    let newAppTicketsUnpaid = 0;
+    let newAppTicketsCancelled = 0;
+    let newAndroidOrders = 0;
+    let newIphoneOrders = 0;
     let usersFirstFromApp = 0;
     let usersWithNoData = 0;
     let usersInRange = 0;
@@ -172,6 +184,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const ordersInRange = orders.filter(inRange);
       if (ordersInRange.length === 0) continue; // юзер активний, але не в цьому діапазоні
       usersInRange++;
+
+      const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
+      const first = sorted[0]; // АБСОЛЮТНО перше замовлення за все життя юзера (не тільки в діапазоні)
+      const firstApp = String(first?.app ?? "");
+      const isNewFromApp = firstApp === "1" || firstApp === "2";
+      if (isNewFromApp) usersFirstFromApp++;
+
       let hasAppOrderInRange = false;
       for (const o of ordersInRange) {
         const appVal = String(o.app ?? "");
@@ -186,17 +205,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (bucket === "paid") { appOrdersPaid++; appTicketsPaid += ticketCount; }
           else if (bucket === "cancelled") { appOrdersCancelled++; appTicketsCancelled += ticketCount; }
           else { appOrdersUnpaid++; appTicketsUnpaid += ticketCount; }
+
+          if (isNewFromApp) {
+            newAppOrders++;
+            newTotalTickets += ticketCount;
+            if (appVal === "1") newAndroidOrders++; else newIphoneOrders++;
+            if (bucket === "paid") { newAppOrdersPaid++; newAppTicketsPaid += ticketCount; }
+            else if (bucket === "cancelled") { newAppOrdersCancelled++; newAppTicketsCancelled += ticketCount; }
+            else { newAppOrdersUnpaid++; newAppTicketsUnpaid += ticketCount; }
+          }
         }
       }
-      const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
-      const first = sorted[0]; // АБСОЛЮТНО перше замовлення за все життя юзера (не тільки в діапазоні) —
-      // юзер уже кваліфікований як "активний у цьому періоді" (ordersInRange.length > 0 вище).
-      const firstApp = String(first?.app ?? "");
-      const isNewFromApp = firstApp === "1" || firstApp === "2";
-      if (isNewFromApp) usersFirstFromApp++;
       // Кеп (25.08): "старий" клієнт (перше замовлення НЕ через додаток), який У ЦЬОМУ
       // ПЕРІОДІ хоч раз купив через додаток — тобто перейшов на новий канал.
-      else if (hasAppOrderInRange) existingUsersNowUsingApp++;
+      if (!isNewFromApp && hasAppOrderInRange) existingUsersNowUsingApp++;
     }
 
     res.status(200).json({
@@ -210,6 +232,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       appTicketsPaid,
       appTicketsUnpaid,
       appTicketsCancelled,
+      newAppOrders,
+      newTotalTickets,
+      newAppOrdersPaid,
+      newAppOrdersUnpaid,
+      newAppOrdersCancelled,
+      newAppTicketsPaid,
+      newAppTicketsUnpaid,
+      newAppTicketsCancelled,
+      newAndroidOrders,
+      newIphoneOrders,
       androidOrders,
       iphoneOrders,
       usersFirstFromApp,
