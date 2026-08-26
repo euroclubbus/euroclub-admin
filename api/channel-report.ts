@@ -157,6 +157,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let appOrdersPaid = 0;
     let appOrdersUnpaid = 0;
     let appOrdersCancelled = 0;
+    let appTicketsPaid = 0;
+    let appTicketsUnpaid = 0;
+    let appTicketsCancelled = 0;
     let androidOrders = 0;
     let iphoneOrders = 0;
     let usersFirstFromApp = 0;
@@ -175,13 +178,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (appVal === "1" || appVal === "2") {
           // Кеп (25.08): рахуємо ТІЛЬКИ замовлення й квитки з додатку — не всі канали.
           appOrders++;
-          totalTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
+          const ticketCount = Array.isArray(o.passengers) ? o.passengers.length : 0;
+          totalTickets += ticketCount;
           if (appVal === "1") androidOrders++; else iphoneOrders++;
           hasAppOrderInRange = true;
           const bucket = orderStatusBucket(o);
-          if (bucket === "paid") appOrdersPaid++;
-          else if (bucket === "cancelled") appOrdersCancelled++;
-          else appOrdersUnpaid++;
+          if (bucket === "paid") { appOrdersPaid++; appTicketsPaid += ticketCount; }
+          else if (bucket === "cancelled") { appOrdersCancelled++; appTicketsCancelled += ticketCount; }
+          else { appOrdersUnpaid++; appTicketsUnpaid += ticketCount; }
         }
       }
       const sorted = [...orders].sort((a, b) => parseBackendDate(a.date) - parseBackendDate(b.date));
@@ -203,6 +207,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       appOrdersPaid,
       appOrdersUnpaid,
       appOrdersCancelled,
+      appTicketsPaid,
+      appTicketsUnpaid,
+      appTicketsCancelled,
       androidOrders,
       iphoneOrders,
       usersFirstFromApp,
