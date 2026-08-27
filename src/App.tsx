@@ -13,6 +13,7 @@ import { OrderRegistry } from "./components/OrderRegistry";
 import { MarketingDashboard } from "./components/MarketingDashboard";
 import { ChannelReport } from "./components/ChannelReport";
 import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
+import { PricingCoefficientSettings } from "./components/PricingCoefficientSettings";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -79,6 +80,7 @@ export default function App() {
             <h1 style={headerTitle}>Налаштування</h1>
           </header>
           <ExchangeRateSettings />
+          <PricingCoefficientSettings />
         </div>
       )}
     </Layout>
