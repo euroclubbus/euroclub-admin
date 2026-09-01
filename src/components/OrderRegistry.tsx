@@ -43,6 +43,29 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
   // ретроактивно заповнюється навіть для старих замовлень), інакше — те, що записав сам
   // застосунок у момент бронювання (17.08).
   const effectiveUserId = order.backendUserId ?? order.userId;
+  // Кеп (01.09): "справжня кількість" по кнопці — живий запит на бекенд, а не лише
+  // документи order_registry (той рахує тільки замовлення через застосунок).
+  const [realTotal, setRealTotal] = useState<{ total: number; app1: number; app2: number; other: number } | null>(null);
+  const [realTotalLoading, setRealTotalLoading] = useState(false);
+  const [realTotalError, setRealTotalError] = useState("");
+  const fetchRealTotal = async () => {
+    setRealTotalLoading(true);
+    setRealTotalError("");
+    try {
+      const res = await fetch("/api/real-user-total", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oid: order.orderNo }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setRealTotalError(data?.error || "Помилка запиту"); return; }
+      setRealTotal({ total: data.total, app1: data.app1, app2: data.app2, other: data.other });
+    } catch (e: any) {
+      setRealTotalError(e?.message || "Помилка мережі");
+    } finally {
+      setRealTotalLoading(false);
+    }
+  };
   // Патчі, а не повна копія масиву — так редагування одного пасажира ніколи не "заморожує"
   // застарілий стан інших. Незачеплені пасажири завжди читаються напряму з order.passengers
   // (живі, onSnapshot), тільки реально відредаговані поля лежать тут до збереження.
@@ -208,6 +231,11 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
         <div style={{ flex: 1, textAlign: "left" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={styles.orderNo}>№ {order.orderNo}</span>
+            {effectiveUserId && (
+              <span style={{ fontSize: 10.5, color: "var(--text-faint)" }} title="user_id (пріоритет — живий з бекенду)">
+                uid {effectiveUserId}
+              </span>
+            )}
             {(() => {
               const bs = backendStatusLabel(order.backendStatus);
               return <span style={{ fontSize: 10.5, fontWeight: 700, color: bs.color, border: `1px solid ${bs.color}`, borderRadius: 20, padding: "1px 8px" }}>{bs.text}</span>;
@@ -223,9 +251,27 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
             <span style={styles.rowStatValue}>{(order.backendAppPlatform ?? order.appPlatform) !== undefined && (order.backendAppPlatform ?? order.appPlatform) !== null ? `APP${order.backendAppPlatform ?? order.appPlatform}` : "—"}</span>
             <span style={styles.rowStatLabel}>джерело</span>
           </div>
-          <div style={styles.rowStat} title="Усі замовлення цього userId у реєстрі">
+          <div style={styles.rowStat} title="Усі замовлення цього userId в НАШОМУ реєстрі — тільки ті, що пройшли через застосунок. Для справжньої кількості з усіх джерел (сайт+застосунок+менеджер) — натисни 'Перевірити' нижче.">
             <span style={styles.rowStatValue}>{userStats?.total ?? "—"}</span>
-            <span style={styles.rowStatLabel}>всі замовлення</span>
+            <span style={styles.rowStatLabel}>всі замовлення (реєстр)</span>
+          </div>
+          <div style={styles.rowStat}>
+            {realTotal ? (
+              <>
+                <span style={styles.rowStatValue} title={`APP1: ${realTotal.app1}, APP2: ${realTotal.app2}, інше (сайт/менеджер): ${realTotal.other}`}>{realTotal.total}</span>
+                <span style={styles.rowStatLabel}>всі джерела (живе)</span>
+              </>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); fetchRealTotal(); }}
+                disabled={realTotalLoading || !effectiveUserId}
+                title={effectiveUserId ? "Живий запит на бекенд — справжня кількість замовлень з усіх джерел (сайт+застосунок+менеджер)" : "Немає userId — недоступно"}
+                style={{ background: "none", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "4px 8px", fontSize: 10.5, color: "var(--text-muted)", cursor: effectiveUserId ? "pointer" : "not-allowed" }}
+              >
+                {realTotalLoading ? "..." : "Перевірити"}
+              </button>
+            )}
+            {realTotalError && <span style={{ fontSize: 10, color: "var(--danger, #E53935)" }}>{realTotalError}</span>}
           </div>
           <div style={styles.rowStat} title="Сума APP1 (Android) + APP2 (iPhone) для цього userId">
             <span style={styles.rowStatValue}>{userStats ? userStats.app1 + userStats.app2 : "—"}</span>
@@ -486,6 +532,8 @@ export function OrderRegistry() {
   // Фільтр за маршрутом (route1 = id рейсу) — дозволяє знайти всі замовлення одного рейсу
   // і вибрати їх масово для розсилки.
   const [routeFilter, setRouteFilter] = useState("");
+  // Кеп (01.09): фільтр по user_id — щоб бачити всі замовлення однієї людини одразу.
+  const [userIdFilter, setUserIdFilter] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [massTitle, setMassTitle] = useState("");
   const [massBody, setMassBody] = useState("");
@@ -515,8 +563,10 @@ export function OrderRegistry() {
     if (bookingDateTo) base = base.filter((o) => (o.createdAt || "").slice(0, 10) <= bookingDateTo);
     const r = routeFilter.trim();
     if (r) base = base.filter((o) => o.route1 === r);
+    const uid = userIdFilter.trim();
+    if (uid) base = base.filter((o) => String(o.backendUserId ?? o.userId ?? "") === uid);
     return sortOrders(base, sortKey);
-  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, bookingDateFrom, bookingDateTo, routeFilter]);
+  }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, bookingDateFrom, bookingDateTo, routeFilter, userIdFilter]);
 
   // Статистика по userId (Кеп, 19.08, точна специфікація):
   // "всі замовлення" = всі документи реєстру з тим самим userId
@@ -743,6 +793,20 @@ export function OrderRegistry() {
           />
           {routeFilter && (
             <button onClick={() => setRouteFilter("")} style={styles.iconBtn}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <div style={styles.dateFilter}>
+          <span style={styles.dateFilterLabel}>user_id:</span>
+          <input
+            value={userIdFilter}
+            onChange={(e) => setUserIdFilter(e.target.value)}
+            placeholder="напр. 187728"
+            style={{ ...styles.dateInput, width: 110 }}
+          />
+          {userIdFilter && (
+            <button onClick={() => setUserIdFilter("")} style={styles.iconBtn}>
               <X size={14} />
             </button>
           )}
