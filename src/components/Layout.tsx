@@ -62,7 +62,10 @@ export function Layout({ active, onChange, children }: Props) {
         </div>
       </aside>
 
-      <main style={styles.main}>{children}</main>
+      {/* Кеп (01.09): реєстр замовлень — ширші дані (user_id, статистика, кнопки), тому
+          для цієї вкладки прибираємо загальне обмеження maxWidth:880, замінюємо на майже
+          повну ширину. Інші вкладки лишаються без змін. */}
+      <main style={active === "registry" ? { ...styles.main, maxWidth: "calc(100vw - 232px - 48px)" } : styles.main}>{children}</main>
     </div>
   );
 }
