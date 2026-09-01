@@ -162,6 +162,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let appTicketsCancelled = 0;
     let androidOrders = 0;
     let iphoneOrders = 0;
+    // Кеп (01.09): виручка (revenue) — сума summ ЛИШЕ по оплачених замовленнях,
+    // конвертована в UAH (курс 50, той самий, що й скрізь в застосунку) для одного
+    // сумарного числа. Той самий поділ на "усі" й "нові" користувачі, що й решта метрик.
+    let revenueUAH = 0;
+    let newRevenueUAH = 0;
+    const EUR_UAH_RATE = 50;
     // Кеп (26.08): той самий набір метрик — але ЛИШЕ для "нових" юзерів (перше замовлення
     // взагалі з додатку), окремий блок у звіті поруч із "усього".
     let newTotalTickets = 0;
@@ -202,7 +208,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (appVal === "1") androidOrders++; else iphoneOrders++;
           hasAppOrderInRange = true;
           const bucket = orderStatusBucket(o);
-          if (bucket === "paid") { appOrdersPaid++; appTicketsPaid += ticketCount; }
+          if (bucket === "paid") {
+            appOrdersPaid++; appTicketsPaid += ticketCount;
+            const summ = Number(o.summ ?? 0);
+            const isEur = String(o.crc ?? "").toLowerCase() === "eur";
+            revenueUAH += isEur ? summ * EUR_UAH_RATE : summ;
+          }
           else if (bucket === "cancelled") { appOrdersCancelled++; appTicketsCancelled += ticketCount; }
           else { appOrdersUnpaid++; appTicketsUnpaid += ticketCount; }
 
@@ -210,7 +221,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             newAppOrders++;
             newTotalTickets += ticketCount;
             if (appVal === "1") newAndroidOrders++; else newIphoneOrders++;
-            if (bucket === "paid") { newAppOrdersPaid++; newAppTicketsPaid += ticketCount; }
+            if (bucket === "paid") {
+              newAppOrdersPaid++; newAppTicketsPaid += ticketCount;
+              const summ = Number(o.summ ?? 0);
+              const isEur = String(o.crc ?? "").toLowerCase() === "eur";
+              newRevenueUAH += isEur ? summ * EUR_UAH_RATE : summ;
+            }
             else if (bucket === "cancelled") { newAppOrdersCancelled++; newAppTicketsCancelled += ticketCount; }
             else { newAppOrdersUnpaid++; newAppTicketsUnpaid += ticketCount; }
           }
@@ -225,6 +241,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalUsers: usersInRange,
       usersWithNoData,
       totalTickets,
+      revenueUAH,
+      newRevenueUAH,
       appOrders,
       appOrdersPaid,
       appOrdersUnpaid,
