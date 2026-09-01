@@ -5,6 +5,8 @@ interface ReportData {
   totalUsers: number;
   usersWithNoData: number;
   totalTickets: number;
+  revenueUAH: number;
+  newRevenueUAH: number;
   appOrders: number;
   appOrdersPaid: number;
   appOrdersUnpaid: number;
@@ -77,6 +79,7 @@ export function ChannelReport() {
   function blockRows(d: ReportData, kind: "new" | "all") {
     const orders = kind === "new" ? d.newAppOrders : d.appOrders;
     const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
+    const revenue = kind === "new" ? d.newRevenueUAH : d.revenueUAH;
     const android = kind === "new" ? d.newAndroidOrders : d.androidOrders;
     const iphone = kind === "new" ? d.newIphoneOrders : d.iphoneOrders;
     const paidO = kind === "new" ? d.newAppOrdersPaid : d.appOrdersPaid;
@@ -91,6 +94,7 @@ export function ChannelReport() {
       { label: "— з них оплачені", value: `${paidO} замовлень | ${paidT} - квитків` },
       { label: "— з них очікують оплати", value: `${unpaidO} | ${unpaidT} - квитків` },
       { label: "— з них скасовані", value: `${cancelO} | ${cancelT} - квитків` },
+      { label: "Виручка (лише оплачені)", value: `${revenue.toLocaleString("uk-UA")} ₴` },
     ];
   }
 
@@ -103,6 +107,7 @@ export function ChannelReport() {
     const block = (kind: "new" | "all") => {
       const orders = kind === "new" ? d.newAppOrders : d.appOrders;
       const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
+      const revenue = kind === "new" ? d.newRevenueUAH : d.revenueUAH;
       const android = kind === "new" ? d.newAndroidOrders : d.androidOrders;
       const iphone = kind === "new" ? d.newIphoneOrders : d.iphoneOrders;
       const paidO = kind === "new" ? d.newAppOrdersPaid : d.appOrdersPaid;
@@ -117,6 +122,7 @@ export function ChannelReport() {
         `— з них оплачені - ${paidO} замовлень | ${paidT} - квитків`,
         `— з них очікують оплати - ${unpaidO} | ${unpaidT} - квитків`,
         `— з них скасовані - ${cancelO} | ${cancelT} - квитків`,
+        `Виручка (лише оплачені) - ${revenue.toLocaleString("uk-UA")} ₴`,
       ].join("\n");
     };
     return [
