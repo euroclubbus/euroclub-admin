@@ -529,6 +529,45 @@ export function OrderRegistry() {
   // активний зараз. Значення обох лишаються в стейті незалежно, просто показуємо на екрані
   // тільки один пара полів за раз.
   const [dateFilterMode, setDateFilterMode] = useState<"trip" | "booking">("trip");
+  // Кеп (01.09): пресети "звіт по днях" — застосовуються до ДАТИ БРОНЮВАННЯ (booking),
+  // бо це про активність "скільки замовлень зроблено", не про дату самої поїздки.
+  type DayPreset = "today" | "yesterday" | "week" | "last7" | "lastMonth" | "all" | "custom";
+  const [activePreset, setActivePreset] = useState<DayPreset>("all");
+  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+  const applyPreset = (preset: DayPreset) => {
+    setActivePreset(preset);
+    setDateFilterMode("booking");
+    const now = new Date();
+    const today = fmtDate(now);
+    if (preset === "today") {
+      setBookingDateFrom(today);
+      setBookingDateTo(today);
+    } else if (preset === "yesterday") {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      setBookingDateFrom(fmtDate(y));
+      setBookingDateTo(fmtDate(y));
+    } else if (preset === "week") {
+      // Поточний тиждень, з понеділка по сьогодні.
+      const monday = new Date(now);
+      const day = monday.getDay(); // 0=нд, 1=пн...
+      const diff = day === 0 ? 6 : day - 1;
+      monday.setDate(monday.getDate() - diff);
+      setBookingDateFrom(fmtDate(monday));
+      setBookingDateTo(today);
+    } else if (preset === "last7") {
+      const d = new Date(now); d.setDate(d.getDate() - 6);
+      setBookingDateFrom(fmtDate(d));
+      setBookingDateTo(today);
+    } else if (preset === "lastMonth") {
+      const d = new Date(now); d.setDate(d.getDate() - 29);
+      setBookingDateFrom(fmtDate(d));
+      setBookingDateTo(today);
+    } else if (preset === "all") {
+      setBookingDateFrom("");
+      setBookingDateTo("");
+    }
+    // "custom" — нічого не міняємо, юзер сам обирає дати нижче.
+  };
   // Фільтр за маршрутом (route1 = id рейсу) — дозволяє знайти всі замовлення одного рейсу
   // і вибрати їх масово для розсилки.
   const [routeFilter, setRouteFilter] = useState("");
@@ -754,29 +793,57 @@ export function OrderRegistry() {
             </button>
           ))}
         </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {([
+            ["today", "Сьогодні"],
+            ["yesterday", "Вчора"],
+            ["week", "Поточний тиждень"],
+            ["last7", "Останні 7 днів"],
+            ["lastMonth", "Останній місяць"],
+            ["all", "Весь період"],
+            ["custom", "Кастомний діапазон"],
+          ] as [DayPreset, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => applyPreset(key)}
+              style={{
+                background: activePreset === key ? "var(--amber)" : "var(--surface-raised)",
+                color: activePreset === key ? "#1a1305" : "var(--text)",
+                border: "1px solid var(--hairline-strong)",
+                borderRadius: 20,
+                padding: "6px 14px",
+                fontSize: 12.5,
+                fontWeight: activePreset === key ? 700 : 400,
+                cursor: "pointer",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={styles.dateFilter}>
-          <select value={dateFilterMode} onChange={(e) => setDateFilterMode(e.target.value as "trip" | "booking")} style={styles.dateModeSelect}>
+          <select value={dateFilterMode} onChange={(e) => { setDateFilterMode(e.target.value as "trip" | "booking"); setActivePreset("custom"); }} style={styles.dateModeSelect}>
             <option value="trip">Дата поїздки</option>
             <option value="booking">Дата бронювання</option>
           </select>
           {dateFilterMode === "trip" ? (
             <>
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={styles.dateInput} />
+              <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setActivePreset("custom"); }} style={styles.dateInput} />
               <span style={styles.mutedSmall}>—</span>
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={styles.dateInput} />
+              <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setActivePreset("custom"); }} style={styles.dateInput} />
               {(dateFrom || dateTo) && (
-                <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={styles.iconBtn}>
+                <button onClick={() => { setDateFrom(""); setDateTo(""); setActivePreset("all"); }} style={styles.iconBtn}>
                   <X size={14} />
                 </button>
               )}
             </>
           ) : (
             <>
-              <input type="date" value={bookingDateFrom} onChange={(e) => setBookingDateFrom(e.target.value)} style={styles.dateInput} />
+              <input type="date" value={bookingDateFrom} onChange={(e) => { setBookingDateFrom(e.target.value); setActivePreset("custom"); }} style={styles.dateInput} />
               <span style={styles.mutedSmall}>—</span>
-              <input type="date" value={bookingDateTo} onChange={(e) => setBookingDateTo(e.target.value)} style={styles.dateInput} />
+              <input type="date" value={bookingDateTo} onChange={(e) => { setBookingDateTo(e.target.value); setActivePreset("custom"); }} style={styles.dateInput} />
               {(bookingDateFrom || bookingDateTo) && (
-                <button onClick={() => { setBookingDateFrom(""); setBookingDateTo(""); }} style={styles.iconBtn}>
+                <button onClick={() => { setBookingDateFrom(""); setBookingDateTo(""); setActivePreset("all"); }} style={styles.iconBtn}>
                   <X size={14} />
                 </button>
               )}
