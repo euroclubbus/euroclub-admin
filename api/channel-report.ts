@@ -162,6 +162,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let appTicketsCancelled = 0;
     let androidOrders = 0;
     let iphoneOrders = 0;
+    // Кеп (01.09): "всього замовлень користувача" — з УСІХ джерел (сайт+застосунок+
+    // менеджер), не тільки app. Дані вже приходять з oid2user-orders (ordersInRange
+    // нижче) — раніше просто не рахувались окремо, бо фільтрувались одразу під app.
+    let allSourcesOrders = 0;
+    let allSourcesTickets = 0;
+    let newAllSourcesOrders = 0;
+    let newAllSourcesTickets = 0;
     // Кеп (01.09): виручка (revenue) — сума summ ЛИШЕ по оплачених замовленнях,
     // конвертована в UAH (курс 50, той самий, що й скрізь в застосунку) для одного
     // сумарного числа. Той самий поділ на "усі" й "нові" користувачі, що й решта метрик.
@@ -198,6 +205,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isNewFromApp) usersFirstFromApp++;
 
       let hasAppOrderInRange = false;
+      // Кеп (01.09): рахуємо ВСІ замовлення цього юзера в діапазоні, незалежно від
+      // джерела — саме те поле "всього замовлень користувача", яке бракувало.
+      allSourcesOrders += ordersInRange.length;
+      for (const o of ordersInRange) allSourcesTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
+      if (isNewFromApp) {
+        newAllSourcesOrders += ordersInRange.length;
+        for (const o of ordersInRange) newAllSourcesTickets += Array.isArray(o.passengers) ? o.passengers.length : 0;
+      }
       for (const o of ordersInRange) {
         const appVal = String(o.app ?? "");
         if (appVal === "1" || appVal === "2") {
@@ -241,6 +256,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       totalUsers: usersInRange,
       usersWithNoData,
       totalTickets,
+      allSourcesOrders,
+      allSourcesTickets,
+      newAllSourcesOrders,
+      newAllSourcesTickets,
       revenueUAH,
       newRevenueUAH,
       appOrders,
