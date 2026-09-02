@@ -5,6 +5,10 @@ interface ReportData {
   totalUsers: number;
   usersWithNoData: number;
   totalTickets: number;
+  allSourcesOrders: number;
+  allSourcesTickets: number;
+  newAllSourcesOrders: number;
+  newAllSourcesTickets: number;
   revenueUAH: number;
   newRevenueUAH: number;
   appOrders: number;
@@ -79,6 +83,8 @@ export function ChannelReport() {
   function blockRows(d: ReportData, kind: "new" | "all") {
     const orders = kind === "new" ? d.newAppOrders : d.appOrders;
     const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
+    const allOrders = kind === "new" ? d.newAllSourcesOrders : d.allSourcesOrders;
+    const allTickets = kind === "new" ? d.newAllSourcesTickets : d.allSourcesTickets;
     const revenue = kind === "new" ? d.newRevenueUAH : d.revenueUAH;
     const android = kind === "new" ? d.newAndroidOrders : d.androidOrders;
     const iphone = kind === "new" ? d.newIphoneOrders : d.iphoneOrders;
@@ -89,6 +95,7 @@ export function ChannelReport() {
     const cancelO = kind === "new" ? d.newAppOrdersCancelled : d.appOrdersCancelled;
     const cancelT = kind === "new" ? d.newAppTicketsCancelled : d.appTicketsCancelled;
     return [
+      { label: "Всього замовлень користувача (усі джерела: сайт+застосунок+менеджер)", value: `${allOrders} замовлень | ${allTickets} квитків` },
       { label: "Кількість замовлень з додатку", value: `${orders} (Android: ${android} | iPhone: ${iphone})` },
       { label: "Кількість квитків з додатку", value: tickets },
       { label: "— з них оплачені", value: `${paidO} замовлень | ${paidT} - квитків` },
@@ -107,6 +114,8 @@ export function ChannelReport() {
     const block = (kind: "new" | "all") => {
       const orders = kind === "new" ? d.newAppOrders : d.appOrders;
       const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
+      const allOrders = kind === "new" ? d.newAllSourcesOrders : d.allSourcesOrders;
+      const allTickets = kind === "new" ? d.newAllSourcesTickets : d.allSourcesTickets;
       const revenue = kind === "new" ? d.newRevenueUAH : d.revenueUAH;
       const android = kind === "new" ? d.newAndroidOrders : d.androidOrders;
       const iphone = kind === "new" ? d.newIphoneOrders : d.iphoneOrders;
@@ -117,6 +126,7 @@ export function ChannelReport() {
       const cancelO = kind === "new" ? d.newAppOrdersCancelled : d.appOrdersCancelled;
       const cancelT = kind === "new" ? d.newAppTicketsCancelled : d.appTicketsCancelled;
       return [
+        `Всього замовлень користувача (усі джерела) - ${allOrders} замовлень | ${allTickets} квитків`,
         `Кількість замовлень з додатку - ${orders} (Android: ${android} | iPhone: ${iphone})`,
         `Кількість квитків з додатку - ${tickets}`,
         `— з них оплачені - ${paidO} замовлень | ${paidT} - квитків`,
