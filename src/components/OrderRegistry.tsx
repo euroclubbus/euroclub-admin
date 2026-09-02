@@ -36,36 +36,16 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
   });
 }
 
-function OrderRow({ order, userStats, selected, onToggleSelect }: { order: OrderRegistryDoc; userStats: { total: number; app1: number; app2: number } | null; selected: boolean; onToggleSelect: () => void }) {
+function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { order: OrderRegistryDoc; userStats: { total: number; app1: number; app2: number } | null; realTotal: { total: number; app1: number; app2: number; other: number } | null; selected: boolean; onToggleSelect: () => void }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Пріоритет — живий userId з бекенду (backendUserId, синхронізується автоматично, тому
   // ретроактивно заповнюється навіть для старих замовлень), інакше — те, що записав сам
   // застосунок у момент бронювання (17.08).
   const effectiveUserId = order.backendUserId ?? order.userId;
-  // Кеп (01.09): "справжня кількість" по кнопці — живий запит на бекенд, а не лише
-  // документи order_registry (той рахує тільки замовлення через застосунок).
-  const [realTotal, setRealTotal] = useState<{ total: number; app1: number; app2: number; other: number } | null>(null);
-  const [realTotalLoading, setRealTotalLoading] = useState(false);
-  const [realTotalError, setRealTotalError] = useState("");
-  const fetchRealTotal = async () => {
-    setRealTotalLoading(true);
-    setRealTotalError("");
-    try {
-      const res = await fetch("/api/real-user-total", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ oid: order.orderNo }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setRealTotalError(data?.error || "Помилка запиту"); return; }
-      setRealTotal({ total: data.total, app1: data.app1, app2: data.app2, other: data.other });
-    } catch (e: any) {
-      setRealTotalError(e?.message || "Помилка мережі");
-    } finally {
-      setRealTotalLoading(false);
-    }
-  };
+  // Кеп (01.09): "справжня кількість" тепер приходить ЗВЕРХУ (realTotalMap, масово
+  // рахується один раз на всю сторінку при натисканні "Оновити") — не окремим запитом
+  // на кожному рядку, щоб не дублювати запити по одному й тому userId.
   // Патчі, а не повна копія масиву — так редагування одного пасажира ніколи не "заморожує"
   // застарілий стан інших. Незачеплені пасажири завжди читаються напряму з order.passengers
   // (живі, onSnapshot), тільки реально відредаговані поля лежать тут до збереження.
@@ -262,16 +242,8 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
                 <span style={styles.rowStatLabel}>всі джерела (живе)</span>
               </>
             ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); fetchRealTotal(); }}
-                disabled={realTotalLoading || !effectiveUserId}
-                title={effectiveUserId ? "Живий запит на бекенд — справжня кількість замовлень з усіх джерел (сайт+застосунок+менеджер)" : "Немає userId — недоступно"}
-                style={{ background: "none", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "4px 8px", fontSize: 10.5, color: "var(--text-muted)", cursor: effectiveUserId ? "pointer" : "not-allowed" }}
-              >
-                {realTotalLoading ? "..." : "Перевірити"}
-              </button>
+              <span style={{ fontSize: 10.5, color: "var(--text-faint)" }} title="Натисни 'Оновити ці N' вище, щоб порахувати по всіх джерелах">—</span>
             )}
-            {realTotalError && <span style={{ fontSize: 10, color: "var(--danger, #E53935)" }}>{realTotalError}</span>}
           </div>
           <div style={styles.rowStat} title="Сума APP1 (Android) + APP2 (iPhone) для цього userId">
             <span style={styles.rowStatValue}>{userStats ? userStats.app1 + userStats.app2 : "—"}</span>
@@ -625,6 +597,51 @@ export function OrderRegistry() {
     return map;
   }, [orders]);
 
+  // Кеп (01.09): "справжня кількість" (усі джерела) для КОЖНОГО унікального user_id —
+  // рахується масово при натисканні "Оновити", а не по кнопці на кожному рядку окремо.
+  // Дедублікує запити (один user_id — один запит, незалежно від кількості замовлень
+  // цієї людини в списку), з обмеженою паралельністю — той самий підхід, що bulkRefresh.
+  const [realTotalMap, setRealTotalMap] = useState<Record<string, { total: number; app1: number; app2: number; other: number }>>({});
+  const [realTotalLoading, setRealTotalLoading] = useState(false);
+  const REAL_TOTAL_CONCURRENCY = 3;
+  const refreshAllRealTotals = async (ordersToUse: OrderRegistryDoc[]) => {
+    setRealTotalLoading(true);
+    try {
+      const userIdToOid = new Map<string, string>();
+      for (const o of ordersToUse) {
+        const uid = o.backendUserId ?? o.userId;
+        if (uid && !userIdToOid.has(uid)) userIdToOid.set(uid, o.orderNo);
+      }
+      const entries = Array.from(userIdToOid.entries());
+      for (let i = 0; i < entries.length; i += REAL_TOTAL_CONCURRENCY) {
+        const batch = entries.slice(i, i + REAL_TOTAL_CONCURRENCY);
+        const results = await Promise.all(
+          batch.map(async ([uid, oid]) => {
+            try {
+              const res = await fetch("/api/real-user-total", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ oid }),
+              });
+              const data = await res.json();
+              if (!res.ok) return null;
+              return { uid, total: data.total, app1: data.app1, app2: data.app2, other: data.other };
+            } catch {
+              return null;
+            }
+          })
+        );
+        setRealTotalMap((prev) => {
+          const next = { ...prev };
+          for (const r of results) if (r) next[r.uid] = { total: r.total, app1: r.app1, app2: r.app2, other: r.other };
+          return next;
+        });
+      }
+    } finally {
+      setRealTotalLoading(false);
+    }
+  };
+
   // ДЕБАГ (Кеп, 19.08): показати сирий JSON усіх документів реєстру з заданим userId —
   // те саме, що бачить userStatsMap, але без обробки, для перевірки напряму.
   const [debugUserId, setDebugUserId] = useState("");
@@ -907,8 +924,8 @@ export function OrderRegistry() {
         <div style={{ ...styles.summaryBar, marginTop: 0, marginBottom: 16 }}>
           <span><strong>{summary.total}</strong> замовлень у списку</span>
           <span style={{ flex: 1 }} />
-          <button onClick={() => bulkRefresh()} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId">
-            {bulkRefreshing ? "Оновлюю…" : `Оновити ці ${summary.total}`}
+          <button onClick={() => { bulkRefresh(); refreshAllRealTotals(filtered); }} disabled={bulkRefreshing || realTotalLoading} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId — включно зі справжньою кількістю замовлень по всіх джерелах">
+            {bulkRefreshing || realTotalLoading ? "Оновлюю…" : `Оновити ці ${summary.total}`}
           </button>
           {bulkResult && (
             <span style={styles.summaryDot}>
@@ -927,6 +944,7 @@ export function OrderRegistry() {
             key={o.orderNo}
             order={o}
             userStats={(o.backendUserId ?? o.userId) ? userStatsMap[(o.backendUserId ?? o.userId) as string] ?? null : null}
+            realTotal={(o.backendUserId ?? o.userId) ? realTotalMap[(o.backendUserId ?? o.userId) as string] ?? null : null}
             selected={selectedIds.has(o.orderNo)}
             onToggleSelect={() => toggleSelect(o.orderNo)}
           />
@@ -945,8 +963,8 @@ export function OrderRegistry() {
           <span style={styles.summaryDot}>·</span>
           <span>{summary.passengers} пасажирів</span>
           <span style={{ flex: 1 }} />
-          <button onClick={() => bulkRefresh()} disabled={bulkRefreshing} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId">
-            {bulkRefreshing ? "Оновлюю…" : `Оновити ці ${summary.total}`}
+          <button onClick={() => { bulkRefresh(); refreshAllRealTotals(filtered); }} disabled={bulkRefreshing || realTotalLoading} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId — включно зі справжньою кількістю замовлень по всіх джерелах">
+            {bulkRefreshing || realTotalLoading ? "Оновлюю…" : `Оновити ці ${summary.total}`}
           </button>
           {bulkResult && (
             <span style={styles.summaryDot}>
