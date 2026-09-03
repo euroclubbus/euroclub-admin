@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
-import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone } from "lucide-react";
+import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download } from "lucide-react";
 
-export type Tab = "push" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "settings";
+export type Tab = "push" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "settings";
 
 interface Props {
   active: Tab;
@@ -20,6 +20,7 @@ const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "08" },
   { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "09" },
   { id: "channel", label: "Ефективність каналу", icon: Smartphone, hint: "10" },
+  { id: "installs", label: "Встановлення", icon: Download, hint: "12" },
   { id: "settings", label: "Налаштування", icon: Settings, hint: "11" },
 ];
 
