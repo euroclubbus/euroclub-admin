@@ -14,6 +14,7 @@ import { MarketingDashboard } from "./components/MarketingDashboard";
 import { ChannelReport } from "./components/ChannelReport";
 import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
 import { PricingCoefficientSettings } from "./components/PricingCoefficientSettings";
+import { InstallStats } from "./components/InstallStats";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -74,6 +75,8 @@ export default function App() {
         <MarketingDashboard />
       ) : tab === "channel" ? (
         <ChannelReport />
+      ) : tab === "installs" ? (
+        <InstallStats />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>
