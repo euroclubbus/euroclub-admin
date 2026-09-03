@@ -62,6 +62,7 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
   const [notifBody, setNotifBody] = useState("");
   const [notifSending, setNotifSending] = useState(false);
   const [notifResult, setNotifResult] = useState<"sent" | "failed" | null>(null);
+  const [notifError, setNotifError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
 
@@ -87,6 +88,7 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
     if (!effectiveUserId || !notifTitle.trim() || !notifBody.trim()) return;
     setNotifSending(true);
     setNotifResult(null);
+    setNotifError("");
     try {
       const res = await fetch("/api/send-push", {
         method: "POST",
@@ -95,6 +97,9 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
       });
       const data = await res.json();
       setNotifResult(data.successCount > 0 ? "sent" : "failed");
+      // Кеп (01.09): раніше показували тільки здогад ("нема токена?"), хоча бекенд УЖЕ
+      // повертає точну причину (workerError) — тепер показуємо її, якщо надсилання не вдалось.
+      setNotifError(data.successCount > 0 ? "" : (data.workerError || data.error || ""));
       if (data.successCount > 0) {
         setNotifTitle("");
         setNotifBody("");
@@ -279,7 +284,11 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
                     {notifSending ? "Надсилаю…" : "Надіслати"}
                   </button>
                   {notifResult === "sent" && <span style={{ color: "var(--success, #4CAF50)", fontSize: 12 }}>Надіслано ✓</span>}
-                  {notifResult === "failed" && <span style={{ color: "var(--danger)", fontSize: 12 }}>Не вдалось надіслати (нема активного токена пристрою?)</span>}
+                  {notifResult === "failed" && (
+                    <span style={{ color: "var(--danger)", fontSize: 12 }} title={notifError}>
+                      Не вдалось надіслати{notifError ? `: ${notifError}` : " (нема активного токена пристрою?)"}
+                    </span>
+                  )}
                 </div>
               </>
             ) : (
