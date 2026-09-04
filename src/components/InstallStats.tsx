@@ -26,6 +26,46 @@ export function InstallStats() {
   const [docs, setDocs] = useState<InstallDoc[] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Кеп (04.09): пресети періоду — той самий підхід, що вже є в реєстрі замовлень.
+  // Фільтруємо по firstSeenAt (коли ВІДБУЛОСЯ встановлення), не lastSeenAt (та вже
+  // окремо покрита картками "Активні за 7/30 днів").
+  type DayPreset = "today" | "yesterday" | "week" | "last7" | "lastMonth" | "all" | "custom";
+  const [activePreset, setActivePreset] = useState<DayPreset>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+  const applyPreset = (preset: DayPreset) => {
+    setActivePreset(preset);
+    const now = new Date();
+    const today = fmtDate(now);
+    if (preset === "today") {
+      setDateFrom(today);
+      setDateTo(today);
+    } else if (preset === "yesterday") {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      setDateFrom(fmtDate(y));
+      setDateTo(fmtDate(y));
+    } else if (preset === "week") {
+      const monday = new Date(now);
+      const day = monday.getDay();
+      const diff = day === 0 ? 6 : day - 1;
+      monday.setDate(monday.getDate() - diff);
+      setDateFrom(fmtDate(monday));
+      setDateTo(today);
+    } else if (preset === "last7") {
+      const d = new Date(now); d.setDate(d.getDate() - 6);
+      setDateFrom(fmtDate(d));
+      setDateTo(today);
+    } else if (preset === "lastMonth") {
+      const d = new Date(now); d.setDate(d.getDate() - 29);
+      setDateFrom(fmtDate(d));
+      setDateTo(today);
+    } else if (preset === "all") {
+      setDateFrom("");
+      setDateTo("");
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -40,7 +80,21 @@ export function InstallStats() {
     load();
   }, []);
 
+  const filteredDocs = useMemo(() => {
+    if (!docs) return null;
+    if (!dateFrom && !dateTo) return docs;
+    return docs.filter((d) => {
+      const t = tsToDate(d.firstSeenAt);
+      if (!t) return false;
+      const day = fmtDate(t);
+      if (dateFrom && day < dateFrom) return false;
+      if (dateTo && day > dateTo) return false;
+      return true;
+    });
+  }, [docs, dateFrom, dateTo]);
+
   const stats = useMemo(() => {
+    const docs = filteredDocs;
     if (!docs) return null;
     const total = docs.length;
     const registered = docs.filter((d) => d.userId).length;
@@ -59,10 +113,10 @@ export function InstallStats() {
   }, [docs]);
 
   const exportCsv = () => {
-    if (!docs) return;
+    if (!filteredDocs) return;
     const rows = [
       ["deviceId", "platform", "appVersion", "userId", "firstSeenAt", "lastSeenAt"],
-      ...docs.map((d) => [
+      ...filteredDocs.map((d) => [
         d.id,
         d.platform || "",
         d.appVersion || "",
@@ -97,6 +151,41 @@ export function InstallStats() {
         </button>
       </header>
 
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {([
+          ["today", "Сьогодні"],
+          ["yesterday", "Вчора"],
+          ["week", "Поточний тиждень"],
+          ["last7", "Останні 7 днів"],
+          ["lastMonth", "Останній місяць"],
+          ["all", "Весь період"],
+          ["custom", "Кастомний діапазон"],
+        ] as [DayPreset, string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => applyPreset(key)}
+            style={{
+              background: activePreset === key ? "var(--amber)" : "var(--surface-raised)",
+              color: activePreset === key ? "#1a1305" : "var(--text)",
+              border: "1px solid var(--hairline-strong)",
+              borderRadius: 20,
+              padding: "6px 14px",
+              fontSize: 12.5,
+              fontWeight: activePreset === key ? 700 : 400,
+              cursor: "pointer",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+        <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Дата встановлення:</span>
+        <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setActivePreset("custom"); }} style={styles.dateInput} />
+        <span style={{ color: "var(--text-faint)" }}>—</span>
+        <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setActivePreset("custom"); }} style={styles.dateInput} />
+      </div>
+
       {stats && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 24 }}>
           <StatCard label="Усього встановлень" value={stats.total} />
@@ -109,9 +198,9 @@ export function InstallStats() {
         </div>
       )}
 
-      {docs && docs.length > 0 && (
+      {filteredDocs && filteredDocs.length > 0 && (
         <button onClick={exportCsv} style={styles.exportBtn}>
-          <Download size={14} /> Експорт у CSV ({docs.length} записів)
+          <Download size={14} /> Експорт у CSV ({filteredDocs.length} записів)
         </button>
       )}
 
@@ -133,4 +222,5 @@ function StatCard({ label, value, icon }: { label: string; value: string | numbe
 const styles: Record<string, React.CSSProperties> = {
   refreshBtn: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: "var(--radius)", padding: "8px 16px", fontSize: 12.5, color: "var(--text)", cursor: "pointer" },
   exportBtn: { display: "flex", alignItems: "center", gap: 6, background: "var(--amber)", border: "none", borderRadius: "var(--radius)", padding: "9px 16px", fontSize: 12.5, fontWeight: 600, color: "#1a1305", cursor: "pointer" },
+  dateInput: { background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, color: "var(--text)" },
 };
