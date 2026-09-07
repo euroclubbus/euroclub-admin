@@ -63,6 +63,7 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
   const [notifSending, setNotifSending] = useState(false);
   const [notifResult, setNotifResult] = useState<"sent" | "failed" | null>(null);
   const [notifError, setNotifError] = useState("");
+  const [notifRawResponse, setNotifRawResponse] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
 
@@ -89,6 +90,7 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
     setNotifSending(true);
     setNotifResult(null);
     setNotifError("");
+    setNotifRawResponse("");
     try {
       const res = await fetch("/api/send-push", {
         method: "POST",
@@ -100,6 +102,9 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
       // Кеп (01.09): раніше показували тільки здогад ("нема токена?"), хоча бекенд УЖЕ
       // повертає точну причину (workerError) — тепер показуємо її, якщо надсилання не вдалось.
       setNotifError(data.successCount > 0 ? "" : (data.workerError || data.error || ""));
+      // Кеп (04.09): показуємо ПОВНУ сиру відповідь ЗАВЖДИ (навіть при "успіху") — щоб
+      // бачити реальні деталі (напр. скільки успішних із скількох), не тільки галочку.
+      setNotifRawResponse(JSON.stringify(data, null, 2));
       if (data.successCount > 0) {
         setNotifTitle("");
         setNotifBody("");
@@ -290,6 +295,11 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
                     </span>
                   )}
                 </div>
+                {notifRawResponse && (
+                  <pre style={{ fontSize: 10.5, color: "var(--text-muted)", background: "var(--surface-raised)", padding: 8, borderRadius: 6, marginTop: 6, maxWidth: 480, overflowX: "auto", whiteSpace: "pre-wrap" }}>
+                    {notifRawResponse}
+                  </pre>
+                )}
               </>
             ) : (
               <div style={styles.notifyLabel}>
