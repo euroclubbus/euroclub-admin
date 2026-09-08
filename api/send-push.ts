@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let batchCount = 0;
       for (const uid of targetUserIds) {
         const ref = db.collection("notifications").doc(uid).collection("messages").doc();
-        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt, type: notifType });
+        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt, type: notifType, deepLink: deepLink ? String(deepLink) : null });
         batchCount++;
         if (batchCount >= 400) {
           await batch.commit();
