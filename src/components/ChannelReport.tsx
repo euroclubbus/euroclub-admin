@@ -32,6 +32,7 @@ interface ReportData {
   newIphoneOrders: number;
   usersFirstFromApp: number;
   existingUsersNowUsingApp: number;
+  b1: number; b2: number; c1: number; c2: number;
   generatedAt: string;
   dateFrom: string | null;
   dateTo: string | null;
@@ -72,11 +73,16 @@ export function ChannelReport() {
     }
   }
 
+  const pct = (v: number, total: number) => total > 0 ? Math.round((v / total) * 100) : 0;
   const headRows = data
     ? [
         { label: "Кількість користувачів які зробили замовлення", value: data.totalUsers },
-        { label: "Нових користувачів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${data.totalUsers > 0 ? Math.round((data.usersFirstFromApp / data.totalUsers) * 100) : 0}%)` },
-        { label: "Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього", value: `${data.existingUsersNowUsingApp} (${data.totalUsers > 0 ? Math.round((data.existingUsersNowUsingApp / data.totalUsers) * 100) : 0}%)` },
+        { label: "Нових користувачів — перше замовлення взагалі з додатку", value: `${data.usersFirstFromApp} (${pct(data.usersFirstFromApp, data.totalUsers)}%)` },
+        { label: "— з них: перше замовлення саме в цьому періоді", value: `${data.b1} (${pct(data.b1, data.totalUsers)}%)` },
+        { label: "— з них: перше замовлення було раніше, зараз повторне", value: `${data.b2} (${pct(data.b2, data.totalUsers)}%)` },
+        { label: "Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього", value: `${data.existingUsersNowUsingApp} (${pct(data.existingUsersNowUsingApp, data.totalUsers)}%)` },
+        { label: "— з них: перше замовлення в додатку саме в цьому періоді", value: `${data.c1} (${pct(data.c1, data.totalUsers)}%)` },
+        { label: "— з них: перше замовлення в додатку було раніше, зараз повторне", value: `${data.c2} (${pct(data.c2, data.totalUsers)}%)` },
       ]
     : [];
 
@@ -109,8 +115,7 @@ export function ChannelReport() {
   const allRows = data ? blockRows(data, "all") : [];
 
   function buildCopyText(d: ReportData): string {
-    const pctFirst = d.totalUsers > 0 ? Math.round((d.usersFirstFromApp / d.totalUsers) * 100) : 0;
-    const pctExisting = d.totalUsers > 0 ? Math.round((d.existingUsersNowUsingApp / d.totalUsers) * 100) : 0;
+    const p = (v: number) => d.totalUsers > 0 ? Math.round((v / d.totalUsers) * 100) : 0;
     const block = (kind: "new" | "all") => {
       const orders = kind === "new" ? d.newAppOrders : d.appOrders;
       const tickets = kind === "new" ? d.newTotalTickets : d.totalTickets;
@@ -137,8 +142,12 @@ export function ChannelReport() {
     };
     return [
       `Кількість користувачів які зробили замовлення - ${d.totalUsers}`,
-      `Нових користувачів — перше замовлення взагалі з додатку - ${d.usersFirstFromApp} (${pctFirst}%)`,
-      `Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього - ${d.existingUsersNowUsingApp} (${pctExisting}%)`,
+      `Нових користувачів — перше замовлення взагалі з додатку - ${d.usersFirstFromApp} (${p(d.usersFirstFromApp)}%)`,
+      `— з них: перше замовлення саме в цьому періоді - ${d.b1} (${p(d.b1)}%)`,
+      `— з них: перше замовлення було раніше, зараз повторне - ${d.b2} (${p(d.b2)}%)`,
+      `Старих клієнтів, які раніше купували не через додаток, а в цьому періоді купили і через нього - ${d.existingUsersNowUsingApp} (${p(d.existingUsersNowUsingApp)}%)`,
+      `— з них: перше замовлення в додатку саме в цьому періоді - ${d.c1} (${p(d.c1)}%)`,
+      `— з них: перше замовлення в додатку було раніше, зараз повторне - ${d.c2} (${p(d.c2)}%)`,
       ``,
       `НОВІ КОРИСТУВАЧІ:`,
       block("new"),
