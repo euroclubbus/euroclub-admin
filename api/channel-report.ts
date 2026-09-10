@@ -191,6 +191,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let usersWithNoData = 0;
     let usersInRange = 0;
     let existingUsersNowUsingApp = 0; // раніше купували НЕ через додаток, у цьому періоді — купують і через нього
+    // Кеп (04.09): повний розподіл A=b+c, кожна ще на 2 підгрупи (1=подія саме в цьому
+    // періоді, 2=подія була раніше, зараз повторне замовлення через додаток).
+    let b1 = 0; // перше замовлення взагалі — через додаток, САМЕ в цьому періоді
+    let b2 = 0; // перше замовлення взагалі — через додаток, було РАНІШЕ (зараз повторне)
+    let c1 = 0; // перше замовлення взагалі — не додаток; перше замовлення В ДОДАТКУ саме в цьому періоді
+    let c2 = 0; // перше замовлення взагалі — не додаток; перше замовлення в додатку було раніше (зараз повторне)
 
     for (const { orders } of results) {
       if (orders.length === 0) { usersWithNoData++; continue; }
@@ -203,6 +209,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const firstApp = String(first?.app ?? "");
       const isNewFromApp = firstApp === "1" || firstApp === "2";
       if (isNewFromApp) usersFirstFromApp++;
+      // Перше замовлення САМЕ через додаток (може відрізнятись від "first", якщо перше
+      // замовлення взагалі було з іншого джерела, а через додаток — пізніше).
+      const firstAppOrderEver = sorted.find(o => { const a = String(o.app ?? ""); return a === "1" || a === "2"; });
+      const firstAppOrderInRange = firstAppOrderEver ? inRange(firstAppOrderEver) : false;
 
       let hasAppOrderInRange = false;
       // Кеп (01.09): рахуємо ВСІ замовлення цього юзера в діапазоні, незалежно від
@@ -250,6 +260,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Кеп (25.08): "старий" клієнт (перше замовлення НЕ через додаток), який У ЦЬОМУ
       // ПЕРІОДІ хоч раз купив через додаток — тобто перейшов на новий канал.
       if (!isNewFromApp && hasAppOrderInRange) existingUsersNowUsingApp++;
+
+      // Кеп (04.09): повний розподіл на 4 підгрупи (b1/b2/c1/c2), сума = usersInRange.
+      if (isNewFromApp) {
+        if (firstAppOrderInRange) b1++; else b2++;
+      } else if (hasAppOrderInRange) {
+        if (firstAppOrderInRange) c1++; else c2++;
+      }
     }
 
     res.status(200).json({
@@ -283,6 +300,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       iphoneOrders,
       usersFirstFromApp,
       existingUsersNowUsingApp,
+      b1, b2, c1, c2,
       generatedAt: new Date().toISOString(),
       dateFrom: dateFrom || null,
       dateTo: dateTo || null,
