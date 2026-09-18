@@ -15,6 +15,7 @@ import { ChannelReport } from "./components/ChannelReport";
 import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
 import { PricingCoefficientSettings } from "./components/PricingCoefficientSettings";
 import { InstallStats } from "./components/InstallStats";
+import { AppIssues } from "./components/AppIssues";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -77,6 +78,8 @@ export default function App() {
         <ChannelReport />
       ) : tab === "installs" ? (
         <InstallStats />
+      ) : tab === "issues" ? (
+        <AppIssues />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>
