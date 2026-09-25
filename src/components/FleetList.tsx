@@ -11,7 +11,7 @@ import {
 } from "firebase/firestore";
 import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { db } from "../lib/firebase";
-import { FleetBus } from "../lib/types";
+import { DEFAULT_AMENITIES, FleetBus } from "../lib/types";
 import { FleetItemForm } from "./FleetItemForm";
 
 const COLLECTION = "fleet";
@@ -148,7 +148,7 @@ export function FleetList() {
               <div style={styles.rowText}>
                 <div style={styles.rowLabel}>{bus.brandModel}</div>
                 <div style={styles.rowMeta}>
-                  {bus.plateNumber} · {bus.floors} пов. · {bus.seats} місць · {bus.euroClass} · {activeAmenities}/5 опцій ·{" "}
+                  {bus.plateNumber} · {bus.floors} пов. · {bus.seats} місць · {bus.euroClass ? `${bus.euroClass} · ` : ""}{activeAmenities}/{Object.keys(DEFAULT_AMENITIES).length} опцій ·{" "}
                   {bus.photos?.length ?? 0} фото ({bus.galleryMode === "slider" ? "слайдер" : "колаж"})
                 </div>
               </div>

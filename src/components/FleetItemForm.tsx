@@ -19,6 +19,7 @@ const AMENITY_LABELS: { key: keyof FleetAmenities; label: string }[] = [
   { key: "wifi", label: "Wi-Fi" },
   { key: "toilet", label: "Туалет" },
   { key: "kitchen", label: "Кухня (чай, кава, окріп)" },
+  { key: "usb", label: "USB-розетки" },
 ];
 
 export function FleetItemForm({ initial, onCancel, onSubmit, saving }: Props) {
@@ -26,8 +27,8 @@ export function FleetItemForm({ initial, onCancel, onSubmit, saving }: Props) {
   const [plateNumber, setPlateNumber] = useState(initial?.plateNumber ?? "");
   const [floors, setFloors] = useState<1 | 2>(initial?.floors ?? 1);
   const [seats, setSeats] = useState(initial?.seats?.toString() ?? "");
-  const [euroClass, setEuroClass] = useState<EuroClass>(initial?.euroClass ?? "Euro 5");
-  const [amenities, setAmenities] = useState<FleetAmenities>(initial?.amenities ?? DEFAULT_AMENITIES);
+  const [euroClass, setEuroClass] = useState<EuroClass>(initial?.euroClass ?? "");
+  const [amenities, setAmenities] = useState<FleetAmenities>({ ...DEFAULT_AMENITIES, ...(initial?.amenities ?? {}) });
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
   const [galleryMode, setGalleryMode] = useState<"slider" | "collage">(initial?.galleryMode ?? "slider");
   const [uploading, setUploading] = useState(false);
@@ -141,6 +142,7 @@ export function FleetItemForm({ initial, onCancel, onSubmit, saving }: Props) {
         <label style={styles.label}>
           Екологічна класифікація
           <select style={styles.input} value={euroClass} onChange={(e) => setEuroClass(e.target.value as EuroClass)}>
+            <option value="">Не вказано</option>
             <option value="Euro 5">Euro 5</option>
             <option value="Euro 6">Euro 6</option>
           </select>

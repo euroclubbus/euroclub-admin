@@ -117,7 +117,7 @@ export interface PageDoc {
   socialLinks?: SocialLink[]; // лише для сторінки "Ми в соцмережах" (id: "social")
 }
 
-export type EuroClass = "Euro 5" | "Euro 6";
+export type EuroClass = "Euro 5" | "Euro 6" | ""; // "" = не вказано
 
 // Каталог знижок — назви й відсотки підтверджені з реальних тестів пікера знижок у
 // застосунку (одна база — 5500грн повний тариф, решта — спостережені ціни від неї).
@@ -196,6 +196,7 @@ export interface FleetAmenities {
   wifi: boolean;
   toilet: boolean;
   kitchen: boolean; // чай/кава/окріп
+  usb: boolean; // USB-розетки
 }
 
 export const DEFAULT_AMENITIES: FleetAmenities = {
@@ -204,6 +205,7 @@ export const DEFAULT_AMENITIES: FleetAmenities = {
   wifi: true,
   toilet: true,
   kitchen: true,
+  usb: false,
 };
 
 export interface FleetBus {
