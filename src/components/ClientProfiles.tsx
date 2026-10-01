@@ -4,7 +4,7 @@ import { Download, KeyRound } from "lucide-react";
 import { db } from "../lib/firebase";
 import { CITIES, cityName } from "../lib/cities";
 
-// Кеп (01.10): дата народження + цікаві міста клієнтів. Пишуть: застосунок (Профіль)
+// Кеп (01.10): дата народження + міста маршрутів клієнтів. Пишуть: застосунок (Профіль)
 // і бекенд сайту (api/profile-sync). "Є застосунок" = є документ device_tokens/{userId}.
 interface Profile {
   id: string;
@@ -101,7 +101,7 @@ export function ClientProfiles() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>Клієнти: ДН і міста</h1>
           <p style={{ fontSize: 13.5, color: "var(--text-muted)", maxWidth: 620 }}>
-            Дата народження і цікаві міста — із Профілю в застосунку та з сайту (бекенд шле через API).
+            Дата народження і міста маршрутів — із Профілю в застосунку та з сайту (бекенд шле через API).
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
