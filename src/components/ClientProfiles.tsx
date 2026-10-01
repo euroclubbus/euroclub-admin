@@ -60,7 +60,7 @@ export function ClientProfiles() {
     return rows
       .filter((p) => !city || (p.favCities || []).includes(city))
       .filter((p) => !onlyBday || (p.birthday && (onlyBday === "today" ? p.birthday.slice(5) === `${mm}-${dd}` : p.birthday.slice(5, 7) === mm)))
-      .filter((p) => !s || [p.id, p.header, p.email, p.phone].some((v) => String(v || "").toLowerCase().includes(s)))
+      .filter((p) => !s || p.id.toLowerCase().includes(s))
       .sort((a, b) => (toDate(b.updatedAt)?.getTime() || 0) - (toDate(a.updatedAt)?.getTime() || 0));
   }, [rows, q, city, onlyBday]);
 
@@ -71,8 +71,8 @@ export function ClientProfiles() {
   }, [rows]);
 
   const exportCsv = () => {
-    const data = [["user_id", "Ім'я", "Email", "Телефон", "Дата народження", "Міста", "Джерело", "Є застосунок", "Оновлено"],
-      ...filtered.map((p) => [p.id, p.header || "", p.email || "", p.phone || "", fmtBday(p.birthday), names(p).join("; "), p.source || "", hasApp(p) ? "так" : "ні", toDate(p.updatedAt)?.toLocaleString("uk-UA") || ""])];
+    const data = [["user_id", "Дата народження", "Міста", "Джерело", "Є застосунок", "Оновлено"],
+      ...filtered.map((p) => [p.id, fmtBday(p.birthday), names(p).join("; "), p.source || "", hasApp(p) ? "так" : "ні", toDate(p.updatedAt)?.toLocaleString("uk-UA") || ""])];
     const csv = data.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }));
@@ -120,7 +120,7 @@ export function ClientProfiles() {
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук: id, ім'я, email, телефон" style={{ ...styles.input, width: 260 }} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук за user_id" style={{ ...styles.input, width: 260 }} />
         <select value={city} onChange={(e) => setCity(e.target.value)} style={styles.input}>
           <option value="">Усі міста</option>
           {usedCities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -136,13 +136,12 @@ export function ClientProfiles() {
       <div style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius)" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr>{["user_id", "Ім'я", "Дата народження", "Міста", "Джерело", "Застосунок", "Оновлено"].map((h) => <th key={h} style={styles.th}>{h}</th>)}</tr>
+            <tr>{["user_id", "Дата народження", "Міста", "Джерело", "Застосунок", "Оновлено"].map((h) => <th key={h} style={styles.th}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {filtered.map((p) => (
               <tr key={p.id}>
                 <td style={styles.td}>{p.id}</td>
-                <td style={styles.td}>{p.header || "—"}<div style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{[p.email, p.phone].filter(Boolean).join(" · ")}</div></td>
                 <td style={styles.td}>{fmtBday(p.birthday) || "—"}</td>
                 <td style={styles.td}>{names(p).join(", ") || "—"}</td>
                 <td style={styles.td}>{p.source === "app" ? `застосунок${p.platform ? ` (${p.platform})` : ""}` : p.source || "—"}</td>
@@ -150,7 +149,7 @@ export function ClientProfiles() {
                 <td style={styles.td}>{toDate(p.updatedAt)?.toLocaleString("uk-UA") || "—"}</td>
               </tr>
             ))}
-            {!filtered.length && !loading && <tr><td colSpan={7} style={{ ...styles.td, color: "var(--text-muted)" }}>Поки порожньо</td></tr>}
+            {!filtered.length && !loading && <tr><td colSpan={6} style={{ ...styles.td, color: "var(--text-muted)" }}>Поки порожньо</td></tr>}
           </tbody>
         </table>
       </div>

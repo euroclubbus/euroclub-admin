@@ -43,7 +43,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
       if ("birthday" in it) data.birthday = normDate(it.birthday);
       if ("favcity" in it) data.favCities = String(it.favcity ?? "").split(/[;,]/).map((x) => x.trim()).filter(Boolean);
-      if (typeof it.header === "string" && it.header.trim()) data.header = it.header.trim();
       batch.set(db().collection("user_profiles").doc(uid), data, { merge: true });
       saved++;
     }
