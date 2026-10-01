@@ -16,6 +16,8 @@ import { ExchangeRateSettings } from "./components/ExchangeRateSettings";
 import { PricingCoefficientSettings } from "./components/PricingCoefficientSettings";
 import { InstallStats } from "./components/InstallStats";
 import { AppIssues } from "./components/AppIssues";
+import { TrackingConsents } from "./components/TrackingConsents";
+import { MetaDestinations } from "./components/MetaDestinations";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -80,6 +82,10 @@ export default function App() {
         <InstallStats />
       ) : tab === "issues" ? (
         <AppIssues />
+      ) : tab === "consents" ? (
+        <TrackingConsents />
+      ) : tab === "metaDest" ? (
+        <MetaDestinations />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>
