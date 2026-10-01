@@ -18,6 +18,7 @@ import { InstallStats } from "./components/InstallStats";
 import { AppIssues } from "./components/AppIssues";
 import { TrackingConsents } from "./components/TrackingConsents";
 import { MetaDestinations } from "./components/MetaDestinations";
+import { ClientProfiles } from "./components/ClientProfiles";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
@@ -86,6 +87,8 @@ export default function App() {
         <TrackingConsents />
       ) : tab === "metaDest" ? (
         <MetaDestinations />
+      ) : tab === "clients" ? (
+        <ClientProfiles />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>

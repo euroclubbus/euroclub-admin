@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
-import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target } from "lucide-react";
+import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
 
-export type Tab = "push" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "settings";
+export type Tab = "push" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings";
 
 interface Props {
   active: Tab;
@@ -24,6 +24,7 @@ const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "issues", label: "Проблеми застосунку", icon: AlertTriangle, hint: "13" },
   { id: "consents", label: "Згода на відстеження", icon: ShieldCheck, hint: "14" },
   { id: "metaDest", label: "Meta-кабінети", icon: Target, hint: "15" },
+  { id: "clients", label: "Клієнти: ДН і міста", icon: Cake, hint: "16" },
   { id: "settings", label: "Налаштування", icon: Settings, hint: "11" },
 ];
 
