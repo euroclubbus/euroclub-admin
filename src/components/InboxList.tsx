@@ -21,6 +21,14 @@ function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () =
   // Редагування вже надісланого повідомлення адміна: переписуємо масив messages цілком
   // (arrayUnion не вміє замінювати елемент). Застосунок слухає тред наживо — текст
   // оновиться і в клієнта. Вже доставлений push змінити неможливо.
+  // Очистити всю переписку треду (і в адмінці, і в застосунку клієнта — він слухає наживо).
+  async function clearChat() {
+    if (!thread.messages.length) return;
+    if (!window.confirm("Очистити всю переписку з цим клієнтом? Відновити буде неможливо.")) return;
+    await setDoc(doc(db, "feedback_threads", thread.id), { messages: [] }, { merge: true });
+    setEditId(null);
+  }
+
   async function saveEdit() {
     const text = editText.trim();
     if (!editId || !text || savingEdit) return;
@@ -108,7 +116,14 @@ function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () =
         ))}
       </div>
 
-      <div style={styles.sectionTitle}>Переписка</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={styles.sectionTitle}>Переписка</div>
+        {thread.messages.length > 0 && (
+          <button style={{ ...styles.editLink, color: "#E5484D", opacity: 1, fontSize: 12 }} onClick={clearChat}>
+            🗑 Очистити чат
+          </button>
+        )}
+      </div>
       <div style={styles.messages}>
         {thread.messages.map((m) => (
           <div key={m.id} style={{ ...styles.messageBubble, ...(m.from === "admin" ? styles.messageAdmin : styles.messageUser) }}>
