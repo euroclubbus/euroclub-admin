@@ -70,6 +70,7 @@ export interface FeedbackMessage {
   from: "user" | "admin";
   text: string;
   at: number;
+  editedAt?: number;
 }
 
 export interface FeedbackThread {

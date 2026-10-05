@@ -14,6 +14,26 @@ function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () =
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Редагування вже надісланого повідомлення адміна: переписуємо масив messages цілком
+  // (arrayUnion не вміє замінювати елемент). Застосунок слухає тред наживо — текст
+  // оновиться і в клієнта. Вже доставлений push змінити неможливо.
+  async function saveEdit() {
+    const text = editText.trim();
+    if (!editId || !text || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const messages = thread.messages.map((m) => (m.id === editId ? { ...m, text, editedAt: Date.now() } : m));
+      await setDoc(doc(db, "feedback_threads", thread.id), { messages }, { merge: true });
+      setEditId(null);
+      setEditText("");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   useEffect(() => {
     const q = query(collection(db, "trip_reports"), where("userId", "==", thread.userId));
@@ -92,8 +112,38 @@ function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () =
       <div style={styles.messages}>
         {thread.messages.map((m) => (
           <div key={m.id} style={{ ...styles.messageBubble, ...(m.from === "admin" ? styles.messageAdmin : styles.messageUser) }}>
-            <div>{m.text}</div>
-            <div style={styles.messageTime}>{fmtTime(m.at)}</div>
+            {editId === m.id ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 280 }}>
+                <textarea
+                  style={{ ...styles.replyInput, minHeight: 70, resize: "vertical", color: "#111", background: "#fff" }}
+                  value={editText}
+                  autoFocus
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                    if (e.key === "Escape") setEditId(null);
+                  }}
+                />
+                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  <button style={styles.editBtn} onClick={() => setEditId(null)}>Скасувати</button>
+                  <button style={{ ...styles.editBtn, fontWeight: 700 }} onClick={saveEdit} disabled={!editText.trim() || savingEdit}>
+                    {savingEdit ? "…" : "Зберегти"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div>{m.text}</div>
+                <div style={{ ...styles.messageTime, display: "flex", gap: 8, alignItems: "center" }}>
+                  <span>{fmtTime(m.at)}{m.editedAt ? " · ред." : ""}</span>
+                  {m.from === "admin" && (
+                    <button style={styles.editLink} onClick={() => { setEditId(m.id); setEditText(m.text); }}>
+                      ✎ Редагувати
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         ))}
         {thread.messages.length === 0 && <div style={styles.mutedSmall}>Повідомлень ще нема</div>}
@@ -188,6 +238,8 @@ const styles: Record<string, React.CSSProperties> = {
   sectionTitle: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-faint)", marginBottom: 10 },
   mutedSmall: { fontSize: 12, color: "var(--text-faint)" },
   tripRow: { display: "flex", flexDirection: "column", gap: 2, padding: "8px 0", borderBottom: "1px solid var(--hairline)", fontSize: 12.5 },
+  editBtn: { padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(0,0,0,0.25)", background: "rgba(255,255,255,0.85)", color: "#111", cursor: "pointer", fontSize: 12 },
+  editLink: { background: "none", border: "none", padding: 0, color: "inherit", opacity: 0.8, cursor: "pointer", fontSize: 11, textDecoration: "underline" },
   messages: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16, maxHeight: 320, overflowY: "auto" },
   messageBubble: { maxWidth: "75%", borderRadius: "var(--radius)", padding: "8px 12px", fontSize: 13 },
   messageUser: { alignSelf: "flex-start", background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)" },
