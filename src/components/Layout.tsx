@@ -1,6 +1,5 @@
 import { ReactNode } from "react";
-import { currentUser } from "../lib/session";
-import { Users, Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
+import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
 
 export type Tab = "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings";
 
@@ -13,19 +12,10 @@ interface Props {
 const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "push", label: "Розсилки", icon: Bell, hint: "01" },
   { id: "menu", label: "Бокове меню", icon: ListTree, hint: "02" },
-  { id: "fleet", label: "Автопарк", icon: Truck, hint: "03" },
-  { id: "routes", label: "Маршрути", icon: Waypoints, hint: "04" },
-  { id: "pages", label: "Сторінки", icon: FileText, hint: "05" },
-  { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "08" },
-  { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "09" },
-  { id: "channel", label: "Ефективність каналу", icon: Smartphone, hint: "10" },
-  { id: "installs", label: "Встановлення", icon: Download, hint: "12" },
-  { id: "issues", label: "Проблеми застосунку", icon: AlertTriangle, hint: "13" },
-  { id: "consents", label: "Згода на відстеження", icon: ShieldCheck, hint: "14" },
-  { id: "metaDest", label: "Meta-кабінети", icon: Target, hint: "15" },
-  { id: "clients", label: "Клієнти: ДН і міста", icon: Cake, hint: "16" },
-  { id: "managers", label: "Менеджери", icon: Users, hint: "17" },
-  { id: "settings", label: "Налаштування", icon: Settings, hint: "11" },
+  { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "03" },
+  { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "04" },
+  { id: "issues", label: "Технічні завдання", icon: AlertTriangle, hint: "05" },
+  { id: "settings", label: "Налаштування", icon: Settings, hint: "06" },
 ];
 
 export function Layout({ active, onChange, children }: Props) {
@@ -39,7 +29,7 @@ export function Layout({ active, onChange, children }: Props) {
         <div style={styles.brandSub}>Панель керування</div>
 
         <nav style={styles.nav}>
-          {NAV.filter((item) => item.id !== "managers" || currentUser()?.role === "owner").map((item) => {
+          {NAV.map((item) => {
             const Icon = item.icon;
             const isActive = item.id === active;
             return (

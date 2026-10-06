@@ -41,9 +41,6 @@ export function Managers() {
 
   return (
     <div>
-      <header style={{ marginBottom: 20 }}>
-        <h1 style={title}>Менеджери</h1>
-      </header>
       {err && <div style={{ color: "var(--danger)", marginBottom: 12 }}>{err}</div>}
 
       <div style={card}>
@@ -100,7 +97,8 @@ export function Managers() {
   );
 }
 
-const title: React.CSSProperties = { fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _title: React.CSSProperties = { fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 };
 const card: React.CSSProperties = { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: 16, marginBottom: 20 };
 const h: React.CSSProperties = { fontWeight: 700, fontSize: 15, marginBottom: 12 };
 const row: React.CSSProperties = { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--hairline)" };

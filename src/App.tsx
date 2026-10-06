@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PasswordGate } from "./components/PasswordGate";
 import { Layout, Tab } from "./components/Layout";
 import { Broadcasts } from "./components/Broadcasts";
-import { Managers } from "./components/Managers";
+import { TabGroup } from "./components/TabGroup";
 import { SideMenuList } from "./components/SideMenuList";
 import { FleetList } from "./components/FleetList";
 import { PagesList } from "./components/PagesList";
@@ -33,31 +33,25 @@ export default function App() {
       {tab === "push" ? (
         <Broadcasts />
       ) : tab === "menu" ? (
-        <SideMenuList />
-      ) : tab === "fleet" ? (
-        <FleetList />
-      ) : tab === "routes" ? (
-        <RoutesList />
-      ) : tab === "pages" ? (
-        <PagesList />
-      ) : tab === "managers" ? (
-        <Managers />
+        <TabGroup tabs={[
+          { id: "menu", label: "Бокове меню", render: () => <SideMenuList /> },
+          { id: "fleet", label: "Автопарк", render: () => <FleetList /> },
+          { id: "routes", label: "Маршрути", render: () => <RoutesList /> },
+          { id: "pages", label: "Сторінки", render: () => <PagesList /> },
+        ]} />
       ) : tab === "registry" ? (
         <OrderRegistry />
       ) : tab === "marketing" ? (
-        <MarketingDashboard />
-      ) : tab === "channel" ? (
-        <ChannelReport />
-      ) : tab === "installs" ? (
-        <InstallStats />
+        <TabGroup tabs={[
+          { id: "marketing", label: "Маркетинг", render: () => <MarketingDashboard /> },
+          { id: "channel", label: "Ефективність каналу", render: () => <ChannelReport /> },
+          { id: "installs", label: "Встановлення", render: () => <InstallStats /> },
+          { id: "consents", label: "Згода на відстеження", render: () => <TrackingConsents /> },
+          { id: "metaDest", label: "Meta-кабінети", render: () => <MetaDestinations /> },
+          { id: "clients", label: "Клієнти: ДН і міста", render: () => <ClientProfiles /> },
+        ]} />
       ) : tab === "issues" ? (
-        <AppIssues />
-      ) : tab === "consents" ? (
-        <TrackingConsents />
-      ) : tab === "metaDest" ? (
-        <MetaDestinations />
-      ) : tab === "clients" ? (
-        <ClientProfiles />
+        <TabGroup tabs={[{ id: "issues", label: "Проблеми застосунку", render: () => <AppIssues /> }]} />
       ) : (
         <div>
           <header style={{ marginBottom: 24 }}>

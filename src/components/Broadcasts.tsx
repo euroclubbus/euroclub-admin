@@ -5,12 +5,13 @@ import { PushHistory } from "./PushHistory";
 import { InboxList } from "./InboxList";
 import { SegmentPanel, SegmentTarget } from "./SegmentPanel";
 import { currentUser } from "../lib/session";
+import { Managers } from "./Managers";
 
 // Кеп (06.10): одна вкладка «Розсилки» з двома підвкладками — PUSH і Вхідні.
 // Сегментація відкривається гамбургером зверху в PUSH.
 export function Broadcasts() {
   const me = currentUser();
-  const [sub, setSub] = useState<"push" | "inbox">("push");
+  const [sub, setSub] = useState<"push" | "inbox" | "managers">("push");
   const [section, setSection] = useState<"marketing" | "service">("marketing");
   const [segOpen, setSegOpen] = useState(false);
   const [target, setTarget] = useState<SegmentTarget | null>(null);
@@ -24,9 +25,14 @@ export function Broadcasts() {
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         <button style={{ ...chip, ...(sub === "push" ? chipOn : {}) }} onClick={() => setSub("push")}>PUSH</button>
         <button style={{ ...chip, ...(sub === "inbox" ? chipOn : {}) }} onClick={() => setSub("inbox")}>Вхідні</button>
+        {me?.role === "owner" && (
+          <button style={{ ...chip, ...(sub === "managers" ? chipOn : {}) }} onClick={() => setSub("managers")}>Розсилки менеджерів</button>
+        )}
       </div>
 
-      {sub === "inbox" ? (
+      {sub === "managers" ? (
+        <Managers />
+      ) : sub === "inbox" ? (
         <InboxList />
       ) : (
         <div>
