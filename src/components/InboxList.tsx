@@ -1,179 +1,184 @@
-import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, orderBy, query, setDoc, where, arrayUnion, serverTimestamp } from "firebase/firestore";
-import { ArrowLeft, MessageCircle, Send } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { Bus, Search, Send, Trash2 } from "lucide-react";
 import { db } from "../lib/firebase";
 import { FeedbackMessage, FeedbackThread, TripReport } from "../lib/types";
 
-function fmtTime(ms: number) {
+// Кеп (06.10): «Вхідні» у вигляді месенджера — зліва діалоги, справа чат на всю висоту,
+// поле вводу знизу. Історія поїздок — згорнута панель у шапці чату.
+
+// lastMessageAt буває і числом (застосунок), і Firestore Timestamp (адмінка) — звідси був "Invalid Date".
+function toMs(v: unknown): number {
+  if (!v) return 0;
+  if (typeof v === "number") return v;
+  const t = v as { toMillis?: () => number; seconds?: number };
+  if (typeof t.toMillis === "function") return t.toMillis();
+  if (typeof t.seconds === "number") return t.seconds * 1000;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function fmtTime(v: unknown) {
+  const ms = toMs(v);
   if (!ms) return "";
-  return new Date(ms).toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const d = new Date(ms);
+  const today = new Date().toDateString() === d.toDateString();
+  return today
+    ? d.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function lastAt(t: FeedbackThread) {
+  const last = t.messages?.[t.messages.length - 1];
+  return Math.max(toMs(t.lastMessageAt), last?.at || 0);
+}
+function isUnread(t: FeedbackThread & { adminReadAt?: number }) {
+  const last = t.messages?.[t.messages.length - 1];
+  return !!last && last.from === "user" && (last.at || 0) > (t.adminReadAt || 0);
 }
 
-function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () => void }) {
+type Thread = FeedbackThread & { adminReadAt?: number };
+
+function Chat({ thread }: { thread: Thread }) {
   const [trips, setTrips] = useState<TripReport[]>([]);
-  const [loadingTrips, setLoadingTrips] = useState(true);
+  const [showTrips, setShowTrips] = useState(false);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  // Редагування вже надісланого повідомлення адміна: переписуємо масив messages цілком
-  // (arrayUnion не вміє замінювати елемент). Застосунок слухає тред наживо — текст
-  // оновиться і в клієнта. Вже доставлений push змінити неможливо.
-  // Очистити всю переписку треду (і в адмінці, і в застосунку клієнта — він слухає наживо).
-  async function clearChat() {
-    if (!thread.messages.length) return;
-    if (!window.confirm("Очистити всю переписку з цим клієнтом? Відновити буде неможливо.")) return;
-    await setDoc(doc(db, "feedback_threads", thread.id), { messages: [] }, { merge: true });
-    setEditId(null);
-  }
-
-  async function saveEdit() {
-    const text = editText.trim();
-    if (!editId || !text || savingEdit) return;
-    setSavingEdit(true);
-    try {
-      const messages = thread.messages.map((m) => (m.id === editId ? { ...m, text, editedAt: Date.now() } : m));
-      await setDoc(doc(db, "feedback_threads", thread.id), { messages }, { merge: true });
-      setEditId(null);
-      setEditText("");
-    } finally {
-      setSavingEdit(false);
-    }
-  }
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setShowTrips(false);
     const q = query(collection(db, "trip_reports"), where("userId", "==", thread.userId));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TripReport, "id">) }));
-        list.sort((a, b) => (b.bookingDate || "").localeCompare(a.bookingDate || ""));
-        setTrips(list);
-        setLoadingTrips(false);
-      },
-      () => setLoadingTrips(false)
-    );
-    return unsub;
+    return onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TripReport, "id">) }));
+      list.sort((a, b) => (b.bookingDate || "").localeCompare(a.bookingDate || ""));
+      setTrips(list);
+    });
   }, [thread.userId]);
 
+  // Позначаємо діалог прочитаним, коли він відкритий і прийшло нове.
+  useEffect(() => {
+    if (isUnread(thread)) setDoc(doc(db, "feedback_threads", thread.id), { adminReadAt: Date.now() }, { merge: true }).catch(() => {});
+  }, [thread]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [thread.id, thread.messages?.length]);
+
   async function sendReply() {
-    if (!reply.trim() || sending) return;
+    const text = reply.trim();
+    if (!text || sending) return;
     setSending(true);
     try {
-      const msg: FeedbackMessage = { id: crypto.randomUUID(), from: "admin", text: reply.trim(), at: Date.now() };
-      await setDoc(
-        doc(db, "feedback_threads", thread.id),
-        { userId: thread.userId, lastMessageAt: serverTimestamp(), messages: arrayUnion(msg) },
-        { merge: true }
-      );
+      const msg: FeedbackMessage = { id: crypto.randomUUID(), from: "admin", text, at: Date.now() };
+      await setDoc(doc(db, "feedback_threads", thread.id), { userId: thread.userId, lastMessageAt: serverTimestamp(), adminReadAt: Date.now(), messages: arrayUnion(msg) }, { merge: true });
       await fetch("/api/send-push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "Відповідь від EuroClub",
-          body: reply.trim(),
-          userIds: [thread.userId],
-          silent: true,
-          type: "service", // особиста відповідь у треді — транзакційне, не маркетинг
-        }),
-      }).catch(() => {
-        // якщо push не долетів — повідомлення все одно збережене в треді, юзер побачить при вході
-      });
+        body: JSON.stringify({ title: "Відповідь від EuroClub", body: text, userIds: [thread.userId], silent: true, type: "service" }),
+      }).catch(() => {});
       setReply("");
     } finally {
       setSending(false);
     }
   }
 
+  async function saveEdit() {
+    const text = editText.trim();
+    if (!editId || !text) return;
+    const messages = thread.messages.map((m) => (m.id === editId ? { ...m, text, editedAt: Date.now() } : m));
+    await setDoc(doc(db, "feedback_threads", thread.id), { messages }, { merge: true });
+    setEditId(null);
+  }
+
+  async function clearChat() {
+    if (!thread.messages.length || !window.confirm("Очистити всю переписку з цим клієнтом? Відновити буде неможливо.")) return;
+    await setDoc(doc(db, "feedback_threads", thread.id), { messages: [] }, { merge: true });
+  }
+
   return (
-    <div>
-      <button style={styles.backBtn} onClick={onBack}>
-        ← Усі звернення
-      </button>
-
-      <div style={styles.threadHeader}>
-        <div style={styles.avatar}>{thread.userId.slice(0, 2).toUpperCase()}</div>
-        <div>
-          <div style={styles.threadTitle}>ID {thread.userId}</div>
-          <div style={styles.threadMeta}>Останнє повідомлення: {fmtTime(thread.lastMessageAt)}</div>
+    <div style={s.chat}>
+      <div style={s.chatHead}>
+        <div style={s.avatar}>{thread.userId.slice(0, 2)}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700 }}>ID {thread.userId}</div>
+          <div style={s.muted}>останнє: {fmtTime(lastAt(thread)) || "—"}</div>
         </div>
+        <button style={{ ...s.headBtn, ...(showTrips ? s.headBtnOn : {}) }} onClick={() => setShowTrips((v) => !v)}>
+          <Bus size={14} /> {trips.length} поїздок
+        </button>
+        <button style={{ ...s.headBtn, color: "#E5484D" }} onClick={clearChat} title="Очистити чат">
+          <Trash2 size={14} />
+        </button>
       </div>
 
-      <div style={styles.tripHistory}>
-        <div style={styles.sectionTitle}>Історія поїздок</div>
-        {loadingTrips && <div style={styles.mutedSmall}>Завантаження…</div>}
-        {!loadingTrips && trips.length === 0 && <div style={styles.mutedSmall}>Поїздок не знайдено</div>}
-        {trips.slice(0, 8).map((t) => (
-          <div key={t.id} style={styles.tripRow}>
-            <span style={{ fontWeight: 600 }}>{t.direction}</span>
-            <span style={styles.mutedSmall}>
-              {t.tripDate} · {t.passengerCount ?? "?"} пас. · {t.roundTrip ? "туди-назад" : "в один бік"}
-              {t.discountIds && t.discountIds.every((d) => d === "0") ? " · без фіксованих знижок" : ""}
-            </span>
-          </div>
-        ))}
-      </div>
+      {showTrips && (
+        <div style={s.trips}>
+          {trips.length === 0 && <div style={s.muted}>Поїздок не знайдено</div>}
+          {trips.map((t) => (
+            <div key={t.id} style={s.tripRow}>
+              <b>{t.direction}</b>
+              <span style={s.muted}>
+                {t.tripDate} · {t.passengerCount ?? "?"} пас. · {t.roundTrip ? "туди-назад" : "в один бік"} · №{t.orderNo}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={styles.sectionTitle}>Переписка</div>
-        {thread.messages.length > 0 && (
-          <button style={{ ...styles.editLink, color: "#E5484D", opacity: 1, fontSize: 12 }} onClick={clearChat}>
-            🗑 Очистити чат
-          </button>
-        )}
-      </div>
-      <div style={styles.messages}>
-        {thread.messages.map((m) => (
-          <div key={m.id} style={{ ...styles.messageBubble, ...(m.from === "admin" ? styles.messageAdmin : styles.messageUser) }}>
-            {editId === m.id ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 280 }}>
-                <textarea
-                  style={{ ...styles.replyInput, minHeight: 70, resize: "vertical", color: "#111", background: "#fff" }}
-                  value={editText}
-                  autoFocus
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
-                    if (e.key === "Escape") setEditId(null);
-                  }}
-                />
-                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                  <button style={styles.editBtn} onClick={() => setEditId(null)}>Скасувати</button>
-                  <button style={{ ...styles.editBtn, fontWeight: 700 }} onClick={saveEdit} disabled={!editText.trim() || savingEdit}>
-                    {savingEdit ? "…" : "Зберегти"}
-                  </button>
-                </div>
+      <div style={s.messages}>
+        {thread.messages.length === 0 && <div style={{ ...s.muted, textAlign: "center", marginTop: 40 }}>Повідомлень немає</div>}
+        {thread.messages.map((m) => {
+          const mine = m.from === "admin";
+          return (
+            <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
+              <div style={{ ...s.bubble, ...(mine ? s.bubbleMine : s.bubbleUser) }}>
+                {editId === m.id ? (
+                  <>
+                    <textarea
+                      autoFocus
+                      style={s.editArea}
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                        if (e.key === "Escape") setEditId(null);
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+                      <button style={s.link} onClick={() => setEditId(null)}>Скасувати</button>
+                      <button style={{ ...s.link, fontWeight: 700 }} onClick={saveEdit}>Зберегти</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.text}</div>
+                    <div style={s.meta}>
+                      {mine && <button style={s.link} onClick={() => { setEditId(m.id); setEditText(m.text); }}>✎</button>}
+                      <span>{fmtTime(m.at)}{(m as FeedbackMessage & { editedAt?: number }).editedAt ? " · ред." : ""}</span>
+                    </div>
+                  </>
+                )}
               </div>
-            ) : (
-              <>
-                <div>{m.text}</div>
-                <div style={{ ...styles.messageTime, display: "flex", gap: 8, alignItems: "center" }}>
-                  <span>{fmtTime(m.at)}{m.editedAt ? " · ред." : ""}</span>
-                  {m.from === "admin" && (
-                    <button style={styles.editLink} onClick={() => { setEditId(m.id); setEditText(m.text); }}>
-                      ✎ Редагувати
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-        {thread.messages.length === 0 && <div style={styles.mutedSmall}>Повідомлень ще нема</div>}
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
       </div>
 
-      <div style={styles.replyRow}>
-        <input
-          style={styles.replyInput}
-          placeholder="Відповісти push-повідомленням…"
+      <div style={s.inputRow}>
+        <textarea
+          style={s.input}
+          rows={1}
+          placeholder="Повідомлення… (Enter — надіслати, Shift+Enter — новий рядок)"
           value={reply}
           onChange={(e) => setReply(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendReply()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendReply(); }
+          }}
         />
-        <button style={styles.sendBtn} onClick={sendReply} disabled={!reply.trim() || sending}>
-          <Send size={15} />
+        <button style={s.send} onClick={sendReply} disabled={!reply.trim() || sending}>
+          <Send size={16} />
         </button>
       </div>
     </div>
@@ -181,86 +186,90 @@ function ThreadDetail({ thread, onBack }: { thread: FeedbackThread; onBack: () =
 }
 
 export function InboxList() {
-  const [threads, setThreads] = useState<FeedbackThread[]>([]);
+  const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const q = query(collection(db, "feedback_threads"), orderBy("lastMessageAt", "desc"));
-    const unsub = onSnapshot(
-      q,
+    return onSnapshot(
+      collection(db, "feedback_threads"),
       (snap) => {
-        setThreads(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FeedbackThread, "id">) })));
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Thread, "id">), messages: (d.data().messages || []) as FeedbackMessage[] }));
+        list.sort((a, b) => lastAt(b) - lastAt(a));
+        setThreads(list);
         setLoading(false);
       },
       () => setLoading(false)
     );
-    return unsub;
   }, []);
 
-  const openThread = openId ? threads.find((t) => t.id === openId) : null;
-  if (openThread) return <ThreadDetail thread={openThread} onBack={() => setOpenId(null)} />;
+  const shown = useMemo(() => threads.filter((t) => !search.trim() || t.userId.includes(search.trim())), [threads, search]);
+  const open = threads.find((t) => t.id === openId) || null;
 
   return (
-    <div>
-      <header style={{ marginBottom: 20 }}>
-        <h1 style={styles.title}>Вхідні</h1>
-        <p style={styles.subtitle}>
-          Звернення користувачів — тільки ID (без email/телефону, ми лише транзитна ланка). Відповідь іде push-ом.
-        </p>
-      </header>
-
-      {loading && <div style={styles.empty}>Завантаження…</div>}
-      {!loading && threads.length === 0 && <div style={styles.empty}>Звернень ще нема.</div>}
-
-      <div style={styles.list}>
-        {threads.map((t) => {
-          const last = t.messages?.[t.messages.length - 1];
-          return (
-            <div key={t.id} style={styles.row} onClick={() => setOpenId(t.id)}>
-              <div style={styles.avatarSm}>
-                <MessageCircle size={15} />
+    <div style={s.shell}>
+      <div style={s.side}>
+        <div style={s.searchBox}>
+          <Search size={14} style={{ opacity: 0.6 }} />
+          <input style={s.searchInput} placeholder="Пошук за ID" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div style={s.threadList}>
+          {loading && <div style={{ ...s.muted, padding: 12 }}>Завантаження…</div>}
+          {!loading && shown.length === 0 && <div style={{ ...s.muted, padding: 12 }}>Діалогів немає</div>}
+          {shown.map((t) => {
+            const last = t.messages[t.messages.length - 1];
+            const unread = isUnread(t);
+            return (
+              <div key={t.id} style={{ ...s.threadRow, ...(t.id === openId ? s.threadRowOn : {}) }} onClick={() => setOpenId(t.id)}>
+                <div style={s.avatarSm}>{t.userId.slice(0, 2)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                    <span style={{ fontWeight: unread ? 800 : 600 }}>ID {t.userId}</span>
+                    <span style={s.muted}>{fmtTime(lastAt(t))}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ ...s.preview, fontWeight: unread ? 600 : 400 }}>{last ? (last.from === "admin" ? "Ви: " : "") + last.text : "—"}</span>
+                    {unread && <span style={s.dot} />}
+                  </div>
+                </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={styles.rowLabel}>ID {t.userId}</div>
-                <div style={styles.rowMeta}>{last ? (last.from === "admin" ? "Ви: " : "") + last.text : "—"}</div>
-              </div>
-              <div style={styles.rowTime}>{fmtTime(t.lastMessageAt)}</div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+      {open ? <Chat thread={open} /> : <div style={{ ...s.chat, alignItems: "center", justifyContent: "center", ...s.muted }}>Оберіть діалог зліва</div>}
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  title: { fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 },
-  subtitle: { color: "var(--text-muted)", fontSize: 13, marginTop: 6, maxWidth: 460 },
-  empty: { border: "1px dashed var(--hairline)", borderRadius: "var(--radius)", padding: "28px 20px", color: "var(--text-muted)", fontSize: 13.5, textAlign: "center" },
-  list: { display: "flex", flexDirection: "column", gap: 8 },
-  row: { display: "flex", alignItems: "center", gap: 12, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: "12px 14px", cursor: "pointer" },
-  avatarSm: { width: 32, height: 32, borderRadius: "50%", background: "var(--surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", flexShrink: 0 },
-  rowLabel: { fontSize: 13.5, fontWeight: 600 },
-  rowMeta: { fontSize: 12, color: "var(--text-faint)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  rowTime: { fontSize: 11, color: "var(--text-faint)", flexShrink: 0 },
-  backBtn: { background: "none", border: "none", color: "var(--text-muted)", fontSize: 12.5, marginBottom: 16, padding: 0, cursor: "pointer" },
-  threadHeader: { display: "flex", alignItems: "center", gap: 12, marginBottom: 20 },
-  avatar: { width: 44, height: 44, borderRadius: "50%", background: "var(--amber)", color: "#1a1305", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
-  threadTitle: { fontSize: 16, fontWeight: 700 },
-  threadMeta: { fontSize: 12, color: "var(--text-faint)" },
-  tripHistory: { background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: 14, marginBottom: 20 },
-  sectionTitle: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-faint)", marginBottom: 10 },
-  mutedSmall: { fontSize: 12, color: "var(--text-faint)" },
-  tripRow: { display: "flex", flexDirection: "column", gap: 2, padding: "8px 0", borderBottom: "1px solid var(--hairline)", fontSize: 12.5 },
-  editBtn: { padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(0,0,0,0.25)", background: "rgba(255,255,255,0.85)", color: "#111", cursor: "pointer", fontSize: 12 },
-  editLink: { background: "none", border: "none", padding: 0, color: "inherit", opacity: 0.8, cursor: "pointer", fontSize: 11, textDecoration: "underline" },
-  messages: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 16, maxHeight: 320, overflowY: "auto" },
-  messageBubble: { maxWidth: "75%", borderRadius: "var(--radius)", padding: "8px 12px", fontSize: 13 },
-  messageUser: { alignSelf: "flex-start", background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)" },
-  messageAdmin: { alignSelf: "flex-end", background: "var(--amber)", color: "#1a1305" },
-  messageTime: { fontSize: 10, opacity: 0.6, marginTop: 3 },
-  replyRow: { display: "flex", gap: 8 },
-  replyInput: { flex: 1, background: "var(--surface-raised)", border: "1px solid var(--hairline-strong)", borderRadius: "var(--radius)", padding: "10px 12px", fontSize: 13.5, color: "var(--text)", outline: "none" },
-  sendBtn: { background: "var(--amber)", border: "none", borderRadius: "var(--radius)", width: 40, display: "flex", alignItems: "center", justifyContent: "center", color: "#1a1305" },
+const s: Record<string, React.CSSProperties> = {
+  shell: { display: "flex", height: "calc(100vh - 210px)", minHeight: 480, border: "1px solid var(--hairline)", borderRadius: "var(--radius)", overflow: "hidden", background: "var(--surface)" },
+  side: { width: 300, flexShrink: 0, borderRight: "1px solid var(--hairline)", display: "flex", flexDirection: "column" },
+  searchBox: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderBottom: "1px solid var(--hairline)" },
+  searchInput: { flex: 1, background: "transparent", border: "none", outline: "none", color: "inherit", fontSize: 13 },
+  threadList: { flex: 1, overflowY: "auto" },
+  threadRow: { display: "flex", gap: 10, padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid var(--hairline)", fontSize: 13 },
+  threadRowOn: { background: "rgba(245,166,35,0.12)" },
+  avatarSm: { width: 36, height: 36, borderRadius: "50%", background: "var(--amber)", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12, flexShrink: 0 },
+  avatar: { width: 38, height: 38, borderRadius: "50%", background: "var(--amber)", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 },
+  preview: { color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, fontSize: 12.5 },
+  dot: { width: 8, height: 8, borderRadius: "50%", background: "var(--amber)", flexShrink: 0 },
+  chat: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
+  chatHead: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--hairline)" },
+  headBtn: { display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--hairline)", background: "transparent", color: "inherit", cursor: "pointer", fontSize: 12 },
+  headBtnOn: { background: "var(--amber)", color: "#111", borderColor: "var(--amber)" },
+  trips: { maxHeight: 220, overflowY: "auto", padding: "8px 14px", borderBottom: "1px solid var(--hairline)", background: "rgba(255,255,255,0.03)" },
+  tripRow: { display: "flex", flexDirection: "column", padding: "5px 0", fontSize: 12.5, borderBottom: "1px solid var(--hairline)" },
+  messages: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 8 },
+  bubble: { maxWidth: "70%", padding: "8px 12px", borderRadius: 14, fontSize: 14, lineHeight: 1.4 },
+  bubbleMine: { background: "var(--amber)", color: "#111", borderBottomRightRadius: 4 },
+  bubbleUser: { background: "rgba(255,255,255,0.08)", borderBottomLeftRadius: 4 },
+  meta: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, fontSize: 10.5, opacity: 0.7, marginTop: 3 },
+  link: { background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", fontSize: 11 },
+  editArea: { width: 280, minHeight: 60, borderRadius: 8, border: "none", padding: 6, color: "#111", background: "#fff", fontFamily: "inherit", fontSize: 13 },
+  inputRow: { display: "flex", gap: 8, padding: 12, borderTop: "1px solid var(--hairline)", alignItems: "flex-end" },
+  input: { flex: 1, resize: "none", maxHeight: 140, minHeight: 42, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--hairline)", background: "transparent", color: "inherit", fontFamily: "inherit", fontSize: 14 },
+  send: { width: 44, height: 42, borderRadius: 10, border: "none", background: "var(--amber)", color: "#111", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  muted: { color: "var(--text-muted)", fontSize: 12 },
 };
