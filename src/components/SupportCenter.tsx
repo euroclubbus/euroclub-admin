@@ -1,24 +1,65 @@
-import { ExternalLink } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { ExternalLink, LogOut } from "lucide-react";
+import { apiPost, ECRM, EcrmUser, getEcrmUser, getToken, setAuth } from "./support/api";
+import { Chats } from "./support/Chats";
+import { QuickReplies, Users } from "./support/Manage";
+import { TabGroup } from "./TabGroup";
 
-// Кеп (06.10): EUROCLUB SUPPORT CENTER (ecrm) — окремий проєкт зі своєю базою і вебхуками,
-// в адмінці відкривається як вкладка.
-const URL = "https://ecrm-fwbs.vercel.app";
-
+// Кеп (06.10): EUROCLUB SUPPORT CENTER перенесено в адмінку (інтерфейс). Сервер, база Neon,
+// вебхуки й канали лишаються на ecrm — сюди звертаємось через його API.
 export function SupportCenter() {
+  const [me, setMe] = useState<EcrmUser | null>(() => (getToken() ? getEcrmUser() : null));
+  const logout = () => { setAuth("", null); setMe(null); };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12 }}>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 }}>EUROCLUB SUPPORT CENTER</h1>
-        <a href={URL} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}>
-          <ExternalLink size={14} /> Відкрити в новій вкладці
-        </a>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 12, color: "var(--text-muted)" }}>
+          {me && <span>{me.name || me.login} · {me.role}</span>}
+          {me && <button onClick={logout} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", display: "flex", gap: 4, alignItems: "center" }}><LogOut size={13} /> Вийти</button>}
+          <a href={ECRM} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, color: "inherit" }}><ExternalLink size={13} /> Стара версія</a>
+        </div>
       </div>
-      <iframe
-        src={URL}
-        title="EUROCLUB SUPPORT CENTER"
-        style={{ flex: 1, width: "100%", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", background: "#fff" }}
-        allow="clipboard-read; clipboard-write; microphone; camera; notifications"
-      />
+      {!me ? (
+        <Login onDone={setMe} />
+      ) : (
+        <TabGroup tabs={[
+          { id: "chats", label: "Чати", render: () => <Chats me={me} onAuthLost={logout} /> },
+          { id: "qr", label: "Швидкі відповіді", render: () => <QuickReplies me={me} /> },
+          ...(me.role !== "manager" ? [{ id: "users", label: "Користувачі", render: () => <Users me={me} /> }] : []),
+        ]} />
+      )}
     </div>
   );
 }
+
+function Login({ onDone }: { onDone: (u: EcrmUser) => void }) {
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr("");
+    try {
+      const d = await apiPost<{ token: string; user: EcrmUser }>("/api/auth?action=login", { login, password });
+      setAuth(d.token, d.user);
+      onDone(d.user);
+    } catch (e) {
+      setErr(e instanceof Error && e.message === "Invalid credentials" ? "Невірний логін або пароль" : e instanceof Error ? e.message : "Помилка");
+    } finally { setBusy(false); }
+  }
+  return (
+    <form onSubmit={submit} style={{ maxWidth: 360, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: "var(--radius)", padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+      <b>Вхід у Support Center</b>
+      <input autoFocus placeholder="Логін" value={login} onChange={(e) => setLogin(e.target.value)} style={inp} />
+      <input type="password" placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} style={inp} />
+      {err && <div style={{ color: "#E5484D", fontSize: 12 }}>{err}</div>}
+      <button type="submit" disabled={busy || !login || !password} style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: "var(--amber)", color: "#111", fontWeight: 700, cursor: "pointer" }}>{busy ? "Вхід…" : "Увійти"}</button>
+      <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>Логін і пароль ті самі, що в Support Center. Вхід запам'ятовується на цьому комп'ютері.</span>
+    </form>
+  );
+}
+const inp: React.CSSProperties = { padding: "9px 11px", borderRadius: 8, border: "1px solid var(--hairline)", background: "transparent", color: "inherit" };
