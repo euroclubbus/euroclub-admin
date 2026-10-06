@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { currentUser } from "../lib/session";
 import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { Check, ChevronDown, ChevronRight, History, Plus, Search, X } from "lucide-react";
 import { db } from "../lib/firebase";
@@ -663,6 +664,9 @@ export function OrderRegistry() {
 
   // ДЕБАГ (Кеп, 19.08): показати сирий JSON усіх документів реєстру з заданим userId —
   // те саме, що бачить userStatsMap, але без обробки, для перевірки напряму.
+  const [showFilters, setShowFilters] = useState(false);
+  const isOwner = currentUser()?.role === "owner";
+  const activeFilters = [statusFilter !== "all", activePreset !== "all", !!routeFilter, !!userIdFilter, !!dateFrom || !!dateTo || !!bookingDateFrom || !!bookingDateTo].filter(Boolean).length;
   const [debugUserId, setDebugUserId] = useState("");
   const [debugData, setDebugData] = useState<any[] | null>(null);
   const runDebug = () => {
@@ -781,10 +785,6 @@ export function OrderRegistry() {
     <div>
       <header style={{ marginBottom: 20 }}>
         <h1 style={styles.title}>Реєстр замовлень</h1>
-        <p style={styles.subtitle}>
-          Усі замовлення (в один і в два боки). Зміни зберігаються сюди й одразу видно в застосунку — але назад на
-          бекенд бронювання поки що НЕ передаються автоматично, поки не буде готовий API-метод.
-        </p>
       </header>
 
       <div style={styles.toolbar}>
@@ -797,26 +797,16 @@ export function OrderRegistry() {
             <option key={o.key} value={o.key}>{o.label}</option>
           ))}
         </select>
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          style={{ ...styles.sortSelect, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap", ...(showFilters || activeFilters ? { borderColor: "var(--amber)" } : {}) }}
+        >
+          ☰ Фільтри{activeFilters ? ` (${activeFilters})` : ""}
+        </button>
       </div>
 
-      {/* ДЕБАГ (Кеп, 19.08) — сирі дані реєстру по userId, без обробки */}
-      <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid var(--amber)", borderRadius: "var(--radius)", padding: 12, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700 }}>Дебаг: сирі дані реєстру по userId</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input value={debugUserId} onChange={(e) => setDebugUserId(e.target.value)} placeholder="userId (напр. 187728)" style={styles.dateInput} />
-          <button onClick={runDebug} style={styles.bulkRefreshBtn}>Показати</button>
-          {debugData && <button onClick={downloadDebug} style={styles.bulkRefreshBtn}>Зберегти JSON</button>}
-        </div>
-        {debugData && (
-          <>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Знайдено документів: {debugData.length}</div>
-            <pre style={{ fontSize: 11, background: "var(--surface)", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 500, whiteSpace: "pre-wrap" }}>
-              {JSON.stringify(debugData, null, 2)}
-            </pre>
-          </>
-        )}
-      </div>
-
+      {showFilters && (
+        <>
       <div style={styles.filterBar}>
         <div style={styles.statusChips}>
           {STATUS_FILTER_OPTIONS.map((o) => (
@@ -915,6 +905,28 @@ export function OrderRegistry() {
           )}
         </div>
       </div>
+
+          {isOwner && (
+      <div style={{ background: "rgba(245,166,35,0.1)", border: "1px solid var(--amber)", borderRadius: "var(--radius)", padding: 12, marginBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700 }}>Дебаг: сирі дані реєстру по userId</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={debugUserId} onChange={(e) => setDebugUserId(e.target.value)} placeholder="userId (напр. 187728)" style={styles.dateInput} />
+          <button onClick={runDebug} style={styles.bulkRefreshBtn}>Показати</button>
+          {debugData && <button onClick={downloadDebug} style={styles.bulkRefreshBtn}>Зберегти JSON</button>}
+        </div>
+        {debugData && (
+          <>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Знайдено документів: {debugData.length}</div>
+            <pre style={{ fontSize: 11, background: "var(--surface)", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 500, whiteSpace: "pre-wrap" }}>
+              {JSON.stringify(debugData, null, 2)}
+            </pre>
+          </>
+        )}
+      </div>
+
+          )}
+        </>
+      )}
 
       {selectedIds.size > 0 && (
         <div style={styles.massBox}>
