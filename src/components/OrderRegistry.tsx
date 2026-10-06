@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { currentUser } from "../lib/session";
+import { currentUser, sessionHeaders } from "../lib/session";
 import { collection, doc, onSnapshot, orderBy, query, updateDoc } from "firebase/firestore";
 import { Check, ChevronDown, ChevronRight, History, Plus, Search, X } from "lucide-react";
 import { db } from "../lib/firebase";
@@ -37,7 +37,9 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
   });
 }
 
-function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { order: OrderRegistryDoc; userStats: { total: number; app1: number; app2: number } | null; realTotal: { total: number; app1: number; app2: number; other: number } | null; selected: boolean; onToggleSelect: () => void }) {
+interface ClientStats { total: number; done: number; cancelled: number; app1: number; app2: number; other: number }
+
+function OrderRow({ order, userStats, selected, onToggleSelect }: { order: OrderRegistryDoc; userStats: ClientStats | null; selected: boolean; onToggleSelect: () => void }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Пріоритет — живий userId з бекенду (backendUserId, синхронізується автоматично, тому
@@ -242,21 +244,15 @@ function OrderRow({ order, userStats, realTotal, selected, onToggleSelect }: { o
             <span style={styles.rowStatValue}>{(order.backendAppPlatform ?? order.appPlatform) !== undefined && (order.backendAppPlatform ?? order.appPlatform) !== null ? `APP${order.backendAppPlatform ?? order.appPlatform}` : "—"}</span>
             <span style={styles.rowStatLabel}>джерело</span>
           </div>
-          <div style={styles.rowStat} title="Усі замовлення цього userId в НАШОМУ реєстрі — тільки ті, що пройшли через застосунок. Для справжньої кількості з усіх джерел (сайт+застосунок+менеджер) — натисни 'Перевірити' нижче.">
+          <div style={styles.rowStat} title={userStats ? `Усі замовлення клієнта з беку, всі канали. APP1: ${userStats.app1}, APP2: ${userStats.app2}, сайт/менеджер: ${userStats.other}, скасовано: ${userStats.cancelled}` : "Історії з беку ще немає — натисни «Оновити»"}>
             <span style={styles.rowStatValue}>{userStats?.total ?? "—"}</span>
-            <span style={styles.rowStatLabel}>всі замовлення (реєстр)</span>
+            <span style={styles.rowStatLabel}>всі замовлення</span>
           </div>
-          <div style={styles.rowStat}>
-            {realTotal ? (
-              <>
-                <span style={styles.rowStatValue} title={`APP1: ${realTotal.app1}, APP2: ${realTotal.app2}, інше (сайт/менеджер): ${realTotal.other}`}>{realTotal.total}</span>
-                <span style={styles.rowStatLabel}>всі джерела (живе)</span>
-              </>
-            ) : (
-              <span style={{ fontSize: 10.5, color: "var(--text-faint)" }} title="Натисни 'Оновити ці N' вище, щоб порахувати по всіх джерелах">—</span>
-            )}
+          <div style={styles.rowStat} title="Поїздка вже відбулась (статус 3 на беку)">
+            <span style={styles.rowStatValue}>{userStats?.done ?? "—"}</span>
+            <span style={styles.rowStatLabel}>виконаних</span>
           </div>
-          <div style={styles.rowStat} title="Сума APP1 (Android) + APP2 (iPhone) для цього userId">
+          <div style={styles.rowStat} title="Сума APP1 (Android) + APP2 (iPhone), з беку">
             <span style={styles.rowStatValue}>{userStats ? userStats.app1 + userStats.app2 : "—"}</span>
             <span style={styles.rowStatLabel}>з додатку</span>
           </div>
@@ -599,63 +595,39 @@ export function OrderRegistry() {
     return sortOrders(base, sortKey);
   }, [orders, search, sortKey, statusFilter, dateFrom, dateTo, bookingDateFrom, bookingDateTo, routeFilter, userIdFilter]);
 
-  // Статистика по userId (Кеп, 19.08, точна специфікація):
-  // "всі замовлення" = всі документи реєстру з тим самим userId
-  // "з додатку" = app1 + app2 (сума)
-  // окремо: app1 (Android), app2 (iPhone)
-  const userStatsMap = useMemo(() => {
-    const map: Record<string, { total: number; app1: number; app2: number }> = {};
-    for (const o of orders) {
-      const uid = o.backendUserId ?? o.userId;
-      if (!uid) continue;
-      if (!map[uid]) map[uid] = { total: 0, app1: 0, app2: 0 };
-      map[uid].total++;
-      const app = String(o.backendAppPlatform ?? o.appPlatform ?? "");
-      if (app === "1") map[uid].app1++;
-      else if (app === "2") map[uid].app2++;
-    }
-    return map;
-  }, [orders]);
-
-  // Кеп (01.09): "справжня кількість" (усі джерела) для КОЖНОГО унікального user_id —
-  // рахується масово при натисканні "Оновити", а не по кнопці на кожному рядку окремо.
-  // Дедублікує запити (один user_id — один запит, незалежно від кількості замовлень
-  // цієї людини в списку), з обмеженою паралельністю — той самий підхід, що bulkRefresh.
-  const [realTotalMap, setRealTotalMap] = useState<Record<string, { total: number; app1: number; app2: number; other: number }>>({});
+  // Кеп (06.10): статистика клієнта — з повної історії беку (client_trips), той самий
+  // механізм, що в розсилках/«Вхідних». Реєстр бачить тільки замовлення з застосунку.
+  const [clientStats, setClientStats] = useState<Record<string, ClientStats>>({});
+  useEffect(() => {
+    return onSnapshot(collection(db, "client_trips"), (snap) => {
+      const map: Record<string, ClientStats> = {};
+      for (const d of snap.docs) {
+        const orders = (d.get("orders") || []) as { status: number; app: string }[];
+        const st: ClientStats = { total: orders.length, done: 0, cancelled: 0, app1: 0, app2: 0, other: 0 };
+        for (const o of orders) {
+          if (Number(o.status) === 3) st.done++;
+          if (Number(o.status) === 0) st.cancelled++;
+          if (String(o.app) === "1") st.app1++;
+          else if (String(o.app) === "2") st.app2++;
+          else st.other++;
+        }
+        map[d.id] = st;
+      }
+      setClientStats(map);
+    });
+  }, []);
   const [realTotalLoading, setRealTotalLoading] = useState(false);
   const REAL_TOTAL_CONCURRENCY = 3;
   const refreshAllRealTotals = async (ordersToUse: OrderRegistryDoc[]) => {
     setRealTotalLoading(true);
     try {
-      const userIdToOid = new Map<string, string>();
-      for (const o of ordersToUse) {
-        const uid = o.backendUserId ?? o.userId;
-        if (uid && !userIdToOid.has(uid)) userIdToOid.set(uid, o.orderNo);
-      }
-      const entries = Array.from(userIdToOid.entries());
-      for (let i = 0; i < entries.length; i += REAL_TOTAL_CONCURRENCY) {
-        const batch = entries.slice(i, i + REAL_TOTAL_CONCURRENCY);
-        const results = await Promise.all(
-          batch.map(async ([uid, oid]) => {
-            try {
-              const res = await fetch("/api/real-user-total", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ oid }),
-              });
-              const data = await res.json();
-              if (!res.ok) return null;
-              return { uid, total: data.total, app1: data.app1, app2: data.app2, other: data.other };
-            } catch {
-              return null;
-            }
-          })
+      const uids = Array.from(new Set(ordersToUse.map((o) => o.backendUserId ?? o.userId).filter(Boolean) as string[]));
+      for (let i = 0; i < uids.length; i += REAL_TOTAL_CONCURRENCY) {
+        await Promise.all(
+          uids.slice(i, i + REAL_TOTAL_CONCURRENCY).map((userId) =>
+            fetch("/api/admin?action=clients-sync", { method: "POST", headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: JSON.stringify({ userId }) }).catch(() => null)
+          )
         );
-        setRealTotalMap((prev) => {
-          const next = { ...prev };
-          for (const r of results) if (r) next[r.uid] = { total: r.total, app1: r.app1, app2: r.app2, other: r.other };
-          return next;
-        });
       }
     } finally {
       setRealTotalLoading(false);
@@ -974,8 +946,7 @@ export function OrderRegistry() {
           <OrderRow
             key={o.orderNo}
             order={o}
-            userStats={(o.backendUserId ?? o.userId) ? userStatsMap[(o.backendUserId ?? o.userId) as string] ?? null : null}
-            realTotal={(o.backendUserId ?? o.userId) ? realTotalMap[(o.backendUserId ?? o.userId) as string] ?? null : null}
+            userStats={(o.backendUserId ?? o.userId) ? clientStats[(o.backendUserId ?? o.userId) as string] ?? null : null}
             selected={selectedIds.has(o.orderNo)}
             onToggleSelect={() => toggleSelect(o.orderNo)}
           />
