@@ -10,13 +10,20 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [deepLink, setDeepLink] = useState("");
+  // Тестова відправка: тільки на вказані user_id (через кому), не в історію розсилок.
+  const [testIds, setTestIds] = useState(() => {
+    try { return localStorage.getItem("push_test_ids") || ""; } catch { return ""; }
+  });
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
 
   const canSend = title.trim().length > 0 && body.trim().length > 0;
 
-  async function handleSend() {
+  async function handleSend(testOnly = false) {
+    const ids = testIds.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+    if (testOnly && ids.length === 0) return;
+    try { localStorage.setItem("push_test_ids", testIds); } catch {}
     setSending(true);
     setResult(null);
     try {
@@ -28,6 +35,7 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
           body: body.trim(),
           deepLink: deepLink.trim() || undefined,
           type: notifType,
+          ...(testOnly ? { userIds: ids, silent: true } : {}),
         }),
       });
       const data = await res.json();
@@ -36,6 +44,7 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
         ok: data.successCount > 0,
         message: `Надіслано ${data.successCount} з ${data.targetCount} пристроїв.${data.workerError ? ` (${data.workerError})` : ''}`,
       });
+      if (testOnly) return; // після тесту текст лишаємо — щоб одразу розіслати всім
       setTitle("");
       setBody("");
       setDeepLink("");
@@ -97,6 +106,22 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
         </div>
       )}
 
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <input
+          style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "inherit" }}
+          placeholder="Тест: user_id (через кому), напр. 187728"
+          value={testIds}
+          onChange={(e) => setTestIds(e.target.value)}
+        />
+        <button
+          style={{ ...styles.cancel, opacity: canSend && testIds.trim() ? 1 : 0.5, whiteSpace: "nowrap" }}
+          disabled={!canSend || !testIds.trim() || sending}
+          onClick={() => handleSend(true)}
+        >
+          {sending ? "Надсилаю…" : "Тест на ID"}
+        </button>
+      </div>
+
       {!confirming ? (
         <button
           style={{ ...styles.sendButton, opacity: canSend ? 1 : 0.5 }}
@@ -115,7 +140,7 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
             <button style={styles.cancel} onClick={() => setConfirming(false)} disabled={sending}>
               Скасувати
             </button>
-            <button style={styles.confirmSend} onClick={handleSend} disabled={sending}>
+            <button style={styles.confirmSend} onClick={() => handleSend(false)} disabled={sending}>
               {sending ? "Надсилаю…" : "Так, надіслати"}
             </button>
           </div>
