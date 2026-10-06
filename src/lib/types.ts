@@ -32,6 +32,14 @@ export interface PushCampaign {
   targetCount: number;
   successCount: number;
   status: PushCampaignStatus;
+  segment?: number | null;
+  segmentLabel?: string | null;
+  segmentId?: string | null;
+  senderId?: string;
+  senderName?: string;
+  bypass?: boolean;
+  dedupSkipped?: number;
+  type?: "marketing" | "service";
 }
 
 // Колекція device_tokens: один документ на користувача, ID документа = uid,

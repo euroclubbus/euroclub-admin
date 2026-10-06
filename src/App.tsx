@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { PasswordGate } from "./components/PasswordGate";
 import { Layout, Tab } from "./components/Layout";
-import { PushForm } from "./components/PushForm";
-import { PushHistory } from "./components/PushHistory";
+import { Broadcasts } from "./components/Broadcasts";
+import { Managers } from "./components/Managers";
 import { SideMenuList } from "./components/SideMenuList";
 import { FleetList } from "./components/FleetList";
 import { PagesList } from "./components/PagesList";
 import { RoutesList } from "./components/RoutesList";
-import { InboxList } from "./components/InboxList";
-import { ReportFilters } from "./components/ReportFilters";
 import { OrderRegistry } from "./components/OrderRegistry";
 import { MarketingDashboard } from "./components/MarketingDashboard";
 import { ChannelReport } from "./components/ChannelReport";
@@ -33,34 +31,7 @@ export default function App() {
   return (
     <Layout active={tab} onChange={setTab}>
       {tab === "push" ? (
-        <div>
-          <header style={{ marginBottom: 24 }}>
-            <h1 style={headerTitle}>Push-розсилки</h1>
-            <p style={headerSubtitle}>
-              Сповіщення йдуть одразу всім пристроям з увімкненими push у додатку. Маркетингова —
-              загальні акції/новини. Сервісна — транзакційні (по замовленню/рейсу), позначаються
-              червоною міткою в "Моїх сповіщеннях" юзера.
-            </p>
-          </header>
-          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-            <button
-              onClick={() => setPushSection("marketing")}
-              style={{ ...tabChip, ...(pushSection === "marketing" ? tabChipActive : {}) }}
-            >
-              Маркетингова
-            </button>
-            <button
-              onClick={() => setPushSection("service")}
-              style={{ ...tabChip, ...(pushSection === "service" ? tabChipActive : {}) }}
-            >
-              Сервісна
-            </button>
-          </div>
-          <div style={{ marginBottom: 32 }}>
-            <PushForm key={pushSection} onSent={() => setRefreshKey((k) => k + 1)} notifType={pushSection} />
-          </div>
-          <PushHistory refreshKey={refreshKey} />
-        </div>
+        <Broadcasts />
       ) : tab === "menu" ? (
         <SideMenuList />
       ) : tab === "fleet" ? (
@@ -69,10 +40,8 @@ export default function App() {
         <RoutesList />
       ) : tab === "pages" ? (
         <PagesList />
-      ) : tab === "inbox" ? (
-        <InboxList />
-      ) : tab === "report" ? (
-        <ReportFilters />
+      ) : tab === "managers" ? (
+        <Managers />
       ) : tab === "registry" ? (
         <OrderRegistry />
       ) : tab === "marketing" ? (

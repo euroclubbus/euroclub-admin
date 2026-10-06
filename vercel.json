@@ -8,6 +8,15 @@
     },
     "api/meta-ads-report.ts": {
       "maxDuration": 30
+    },
+    "api/clients-sync.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/clients-sync",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Bus } from "lucide-react";
+import { setSession } from "../lib/session";
 
 interface Props {
   onUnlock: () => void;
@@ -11,17 +12,31 @@ interface Props {
 // живе тільки в пам'яті React і губиться при перезавантаженні сторінки —
 // свідомо, щоб нічого пов'язаного з доступом не лежало в browser storage.
 export function PasswordGate({ onUnlock }: Props) {
+  const [login, setLogin] = useState("");
   const [value, setValue] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | false>(false);
+  const [busy, setBusy] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  // Кеп (06.10): власник — тільки пароль (логін порожній), менеджер — логін + пароль.
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const expected = import.meta.env.VITE_ADMIN_PASSWORD;
-    if (expected && value === expected) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: login.trim(), password: value }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.token) throw new Error(d.error || "Невірний пароль");
+      setSession(d.token, d.user);
       onUnlock();
-    } else {
-      setError(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Помилка входу");
       setValue("");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -36,8 +51,14 @@ export function PasswordGate({ onUnlock }: Props) {
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <input
-            type="password"
             autoFocus
+            value={login}
+            onChange={(e) => { setLogin(e.target.value); setError(false); }}
+            placeholder="Логін (власнику — не потрібно)"
+            style={{ ...styles.input, borderColor: "var(--hairline)" }}
+          />
+          <input
+            type="password"
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
@@ -49,9 +70,9 @@ export function PasswordGate({ onUnlock }: Props) {
               borderColor: error ? "var(--danger)" : "var(--hairline)",
             }}
           />
-          {error && <div style={styles.error}>Невірний пароль</div>}
+          {error && <div style={styles.error}>{error}</div>}
           <button type="submit" style={styles.button}>
-            Увійти
+            {busy ? "Вхід…" : "Увійти"}
           </button>
         </form>
       </div>

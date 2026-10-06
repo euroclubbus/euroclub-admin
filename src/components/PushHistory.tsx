@@ -27,7 +27,7 @@ const STATUS_COLOR: Record<PushCampaign["status"], string> = {
   failed: "var(--danger)",
 };
 
-export function PushHistory({ refreshKey }: { refreshKey: number }) {
+export function PushHistory({ refreshKey, senderId }: { refreshKey: number; senderId?: string }) {
   const [campaigns, setCampaigns] = useState<PushCampaign[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -65,7 +65,7 @@ export function PushHistory({ refreshKey }: { refreshKey: number }) {
       )}
 
       <div style={styles.board}>
-        {campaigns.map((c, i) => (
+        {campaigns.filter((c) => !senderId || c.senderId === senderId).map((c, i) => (
           <div
             key={c.id}
             style={{
@@ -76,6 +76,10 @@ export function PushHistory({ refreshKey }: { refreshKey: number }) {
             <div style={styles.title}>
               <div>{c.title}</div>
               <div style={styles.body}>{c.body}</div>
+              <div style={{ ...styles.body, opacity: 0.7, marginTop: 2 }}>
+                {c.senderName ? `${c.senderName} · ` : ""}{c.segmentLabel ? `Сегмент: ${c.segmentLabel}` : c.segment ? `Сегмент: ${c.segment} клієнтів` : "Всім"}
+                {c.bypass ? " · без модерації" : ""}{c.dedupSkipped ? ` · пропущено дублів ${c.dedupSkipped}` : ""}
+              </div>
             </div>
             <div style={{ ...styles.mono, ...styles.colWhen }}>{formatDate(c.sentAt)}</div>
             <div style={{ ...styles.mono, ...styles.colCount }}>

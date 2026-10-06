@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { Send } from "lucide-react";
+import { currentUser, sessionHeaders } from "../lib/session";
+import type { SegmentTarget } from "./SegmentPanel";
 
 interface Result {
   ok: boolean;
   message: string;
 }
 
-export function PushForm({ onSent, notifType }: { onSent: () => void; notifType: "marketing" | "service" }) {
+export function PushForm({ onSent, notifType, target, onClearTarget }: { onSent: () => void; notifType: "marketing" | "service"; target?: SegmentTarget | null; onClearTarget?: () => void }) {
+  const me = currentUser();
+  const canBypass = !!me && (me.role === "owner" || me.canBypass);
+  const [bypass, setBypass] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [deepLink, setDeepLink] = useState("");
@@ -29,8 +34,10 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
     try {
       const res = await fetch("/api/send-push", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...sessionHeaders() },
         body: JSON.stringify({
+          ...(!testOnly && target ? { userIds: target.userIds, segmentLabel: target.label, segmentId: target.segmentId } : {}),
+          ...(!testOnly && bypass ? { bypass: true } : {}),
           title: title.trim(),
           body: body.trim(),
           deepLink: deepLink.trim() || undefined,
@@ -42,7 +49,7 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
       if (!res.ok) throw new Error(data?.error ?? "Невідома помилка");
       setResult({
         ok: data.successCount > 0,
-        message: `Надіслано ${data.successCount} з ${data.targetCount} пристроїв.${data.workerError ? ` (${data.workerError})` : ''}`,
+        message: `Надіслано ${data.successCount} з ${data.targetCount} пристроїв.${data.dedupSkipped ? ` Пропущено ${data.dedupSkipped} (вже отримали розсилку нещодавно).` : ''}${data.workerError ? ` (${data.workerError})` : ''}`,
       });
       if (testOnly) return; // після тесту текст лишаємо — щоб одразу розіслати всім
       setTitle("");
@@ -122,6 +129,24 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
         </button>
       </div>
 
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 12px", fontSize: 13 }}>
+        <span style={{ color: "var(--text-muted)" }}>Кому:</span>
+        {target ? (
+          <>
+            <b>Сегмент — {target.userIds.length} клієнтів</b>
+            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>{target.label}</span>
+            <button style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", textDecoration: "underline", fontSize: 12 }} onClick={onClearTarget}>скинути</button>
+          </>
+        ) : (
+          <b>Всім</b>
+        )}
+        {canBypass && notifType === "marketing" && (
+          <label style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <input type="checkbox" checked={bypass} onChange={(e) => setBypass(e.target.checked)} /> Обійти модерацію
+          </label>
+        )}
+      </div>
+
       {!confirming ? (
         <button
           style={{ ...styles.sendButton, opacity: canSend ? 1 : 0.5 }}
@@ -134,7 +159,7 @@ export function PushForm({ onSent, notifType }: { onSent: () => void; notifType:
       ) : (
         <div style={styles.confirmBox}>
           <div style={styles.confirmText}>
-            Надіслати це сповіщення усім користувачам додатку? Дію не можна скасувати.
+            {target ? `Надіслати сегменту (${target.userIds.length} клієнтів)?` : "Надіслати це сповіщення усім користувачам додатку?"} Дію не можна скасувати.
           </div>
           <div style={styles.confirmActions}>
             <button style={styles.cancel} onClick={() => setConfirming(false)} disabled={sending}>

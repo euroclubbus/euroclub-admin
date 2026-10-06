@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
+import { readSession } from "./_lib/session.js";
 
 // ПЕРЕРОБЛЕНО (13.08, Кеп): раніше ця функція сама читала device_tokens і слала через
 // Firebase Admin SDK (messaging.sendEachForMulticast) — це вміє ТІЛЬКИ Android (FCM),
@@ -64,6 +65,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else {
       const snap = await db.collection("device_tokens").listDocuments();
       targetUserIds = snap.map((d) => d.id);
+    }
+
+    // Кеп (06.10): автоматична модерація маркетингових розсилок + захист від дублювання.
+    // Сервісні (Вхідні, по замовленню) і тестові (silent) — без модерації.
+    const session = readSession(req);
+    const sender = session ?? { id: "unknown", name: "Без входу", role: "manager" as const, canBypass: false };
+    const isTest = req.body?.silent === true;
+    const moderated = notifType === "marketing" && !isTest;
+    const bypass = moderated && req.body?.bypass === true && (sender.role === "owner" || sender.canBypass);
+    let dedupSkipped = 0;
+    if (moderated && !bypass) {
+      const rules = (await db.collection("settings").doc("pushModeration").get()).data() ?? {};
+      const dedupHours = Number(rules.dedupHours ?? 24);
+      const quietFrom = Number(rules.quietFrom ?? 21);
+      const quietTo = Number(rules.quietTo ?? 9);
+      const maxPerDay = Number(rules.maxPerDayPerSender ?? 3);
+      const hourKyiv = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Europe/Kyiv" }).format(new Date()));
+      const quiet = quietFrom > quietTo ? hourKyiv >= quietFrom || hourKyiv < quietTo : hourKyiv >= quietFrom && hourKyiv < quietTo;
+      if (quiet) {
+        res.status(403).json({ error: `Модерація: тихі години ${quietFrom}:00–${quietTo}:00 (Київ), розсилка заборонена` });
+        return;
+      }
+      const recent = await db.collection("push_campaigns").where("sentAt", ">=", Date.now() - 24 * 3600 * 1000).get();
+      const mine = recent.docs.filter((d) => d.get("senderId") === sender.id && d.get("type") !== "service").length;
+      if (mine >= maxPerDay) {
+        res.status(403).json({ error: `Модерація: ліміт ${maxPerDay} розсилок на добу для ${sender.name} вичерпано` });
+        return;
+      }
+      if (dedupHours > 0 && targetUserIds.length) {
+        const since = Date.now() - dedupHours * 3600 * 1000;
+        const keep: string[] = [];
+        for (let i = 0; i < targetUserIds.length; i += 300) {
+          const part = targetUserIds.slice(i, i + 300);
+          const snaps = await db.getAll(...part.map((u) => db.collection("push_log").doc(u)));
+          snaps.forEach((sn, k) => {
+            const last = Number(sn.get("lastMarketingAt") ?? 0);
+            if (last > since) dedupSkipped++;
+            else keep.push(part[k]);
+          });
+        }
+        targetUserIds = keep;
+        if (!targetUserIds.length) {
+          res.status(403).json({ error: `Модерація: усі ${dedupSkipped} отримувачів уже мали розсилку за останні ${dedupHours} год` });
+          return;
+        }
+      }
     }
 
     // Кеп (19.08): "папка сповіщень" пишеться ЗАВЖДИ, незалежно від того, чи дійде push —
@@ -136,10 +183,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         successCount,
         status,
         segment: Array.isArray(userIds) && userIds.length > 0 ? userIds.length : null, // null = всім
+        segmentLabel: req.body?.segmentLabel ? String(req.body.segmentLabel).slice(0, 300) : null,
+        segmentId: req.body?.segmentId ? String(req.body.segmentId) : null,
+        senderId: sender.id,
+        senderName: sender.name,
+        bypass,
+        dedupSkipped,
+        type: notifType,
       });
     }
+    // Журнал для захисту від дублювання — тільки маркетингові, не тестові.
+    if (moderated && successCount > 0) {
+      let b = db.batch();
+      let n = 0;
+      for (const u of targetUserIds) {
+        b.set(db.collection("push_log").doc(u), { lastMarketingAt: Date.now(), lastBy: sender.name }, { merge: true });
+        if (++n >= 400) { await b.commit(); b = db.batch(); n = 0; }
+      }
+      if (n) await b.commit();
+    }
 
-    res.status(200).json({ targetCount, successCount, status, workerError });
+    res.status(200).json({ targetCount, successCount, status, workerError, dedupSkipped, bypass });
   } catch (err) {
     console.error("send-push error:", err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Внутрішня помилка" });
