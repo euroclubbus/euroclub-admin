@@ -48,6 +48,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const stateRef = db.collection("settings").doc("clientsSync");
 
   try {
+    // Один клієнт на вимогу (відкрили чат у «Вхідних») — шукаємо будь-який його oid.
+    const single = String(req.body?.userId ?? "").trim();
+    if (single) {
+      let snap = await db.collection("order_registry").where("backendUserId", "==", single).limit(1).get();
+      if (snap.empty) snap = await db.collection("order_registry").where("userId", "==", single).limit(1).get();
+      if (snap.empty) return res.status(404).json({ error: "no_oid" });
+      const orders = await fetchHistory(snap.docs[0].id);
+      await db.collection("client_trips").doc(single).set({ userId: single, orders: orders.map(normalize), updatedAt: Date.now() });
+      return res.status(200).json({ ok: true, count: orders.length });
+    }
+
     // Карта userId → один oid (будь-який — метод повертає всю історію клієнта).
     const reg = await db.collection("order_registry").select("userId", "backendUserId").get();
     const map = new Map<string, string>();

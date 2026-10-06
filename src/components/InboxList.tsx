@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { Bus, Search, Send, Trash2 } from "lucide-react";
 import { db } from "../lib/firebase";
-import { FeedbackMessage, FeedbackThread, TripReport } from "../lib/types";
+import { FeedbackMessage, FeedbackThread } from "../lib/types";
+import { cityName } from "../lib/cities";
+import { sessionHeaders } from "../lib/session";
 
 // Кеп (06.10): «Вхідні» у вигляді месенджера — зліва діалоги, справа чат на всю висоту,
 // поле вводу знизу. Історія поїздок — згорнута панель у шапці чату.
@@ -37,8 +39,16 @@ function isUnread(t: FeedbackThread & { adminReadAt?: number }) {
 
 type Thread = FeedbackThread & { adminReadAt?: number };
 
+interface BackendOrder { oid: string; status: number; legs: { from: string; to: string; date: string | null; open: boolean }[]; dsc: string[] }
+const STATUS: Record<number, string> = { 0: "скасовано", 1: "не сплачено", 2: "оплачено", 3: "відбулась" };
+function fmtD(iso: string | null) {
+  return iso ? iso.split("-").reverse().join(".") : "відкрита дата";
+}
+
 function Chat({ thread }: { thread: Thread }) {
-  const [trips, setTrips] = useState<TripReport[]>([]);
+  // Кеп (06.10): поїздки — повна історія з беку (client_trips), не trip_reports застосунку.
+  const [orders, setOrders] = useState<BackendOrder[] | null>(null);
+  const [tripsState, setTripsState] = useState<"loading" | "ok" | "no_oid" | "error">("loading");
   const [showTrips, setShowTrips] = useState(false);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
@@ -48,13 +58,28 @@ function Chat({ thread }: { thread: Thread }) {
 
   useEffect(() => {
     setShowTrips(false);
-    const q = query(collection(db, "trip_reports"), where("userId", "==", thread.userId));
-    return onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TripReport, "id">) }));
-      list.sort((a, b) => (b.bookingDate || "").localeCompare(a.bookingDate || ""));
-      setTrips(list);
-    });
+    setOrders(null);
+    setTripsState("loading");
+    let requested = false;
+    return onSnapshot(doc(db, "client_trips", thread.userId), (snap) => {
+      if (snap.exists()) {
+        setOrders((snap.data().orders || []) as BackendOrder[]);
+        setTripsState("ok");
+        return;
+      }
+      if (requested) return;
+      requested = true;
+      fetch("/api/admin?action=clients-sync", { method: "POST", headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: JSON.stringify({ userId: thread.userId }) })
+        .then(async (r) => {
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) setTripsState(d.error === "no_oid" ? "no_oid" : "error");
+        })
+        .catch(() => setTripsState("error"));
+    }, () => setTripsState("error")); // напр. немає правила Firestore для client_trips
   }, [thread.userId]);
+
+  const tripCount = (orders || []).filter((o) => o.status !== 0).reduce((n, o) => n + o.legs.filter((l) => !l.open && l.date).length, 0);
+  const sortedOrders = [...(orders || [])].sort((a, b) => (b.legs[0]?.date || "").localeCompare(a.legs[0]?.date || ""));
 
   // Позначаємо діалог прочитаним, коли він відкритий і прийшло нове.
   useEffect(() => {
@@ -105,7 +130,7 @@ function Chat({ thread }: { thread: Thread }) {
           <div style={s.muted}>останнє: {fmtTime(lastAt(thread)) || "—"}</div>
         </div>
         <button style={{ ...s.headBtn, ...(showTrips ? s.headBtnOn : {}) }} onClick={() => setShowTrips((v) => !v)}>
-          <Bus size={14} /> {trips.length} поїздок
+          <Bus size={14} /> {tripsState === "ok" ? `${tripCount} поїздок` : tripsState === "loading" ? "…" : tripsState === "no_oid" ? "немає історії" : "помилка"}
         </button>
         <button style={{ ...s.headBtn, color: "#E5484D" }} onClick={clearChat} title="Очистити чат">
           <Trash2 size={14} />
@@ -114,13 +139,16 @@ function Chat({ thread }: { thread: Thread }) {
 
       {showTrips && (
         <div style={s.trips}>
-          {trips.length === 0 && <div style={s.muted}>Поїздок не знайдено</div>}
-          {trips.map((t) => (
-            <div key={t.id} style={s.tripRow}>
-              <b>{t.direction}</b>
-              <span style={s.muted}>
-                {t.tripDate} · {t.passengerCount ?? "?"} пас. · {t.roundTrip ? "туди-назад" : "в один бік"} · №{t.orderNo}
-              </span>
+          {tripsState === "loading" && <div style={s.muted}>Завантаження з беку…</div>}
+          {tripsState === "no_oid" && <div style={s.muted}>Клієнт не має замовлень у застосунку — історію з беку отримати неможливо (потрібен метод «замовлення за user_id»).</div>}
+          {tripsState === "error" && <div style={s.muted}>Не вдалося отримати історію з беку.</div>}
+          {tripsState === "ok" && sortedOrders.length === 0 && <div style={s.muted}>Замовлень немає</div>}
+          {tripsState === "ok" && sortedOrders.map((o) => (
+            <div key={o.oid} style={{ ...s.tripRow, opacity: o.status === 0 ? 0.5 : 1 }}>
+              {o.legs.map((l, i) => (
+                <b key={i}>{cityName(l.from) || l.from} → {cityName(l.to) || l.to} · {l.open ? "відкрита дата" : fmtD(l.date)}</b>
+              ))}
+              <span style={s.muted}>№{o.oid} · {o.dsc.length} пас. · {STATUS[o.status] ?? `статус ${o.status}`}</span>
             </div>
           ))}
         </div>
