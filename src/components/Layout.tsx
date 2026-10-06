@@ -20,14 +20,16 @@ const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
 ];
 
 export function Layout({ active, onChange, children }: Props) {
+  // Кеп (06.10): у Support Center меню згортається до іконок, сторінка — на всю ширину.
+  const compact = active === "support";
   return (
     <div style={styles.shell}>
-      <aside style={styles.sidebar}>
-        <div style={styles.brand}>
+      <aside style={compact ? { ...styles.sidebar, width: 64, padding: "24px 8px" } : styles.sidebar}>
+        <div style={{ ...styles.brand, justifyContent: compact ? "center" : undefined }}>
           <Bus size={20} color="var(--amber)" strokeWidth={2} />
-          <span style={styles.brandText}>EUROCLUB</span>
+          {!compact && <span style={styles.brandText}>EUROCLUB</span>}
         </div>
-        <div style={styles.brandSub}>Панель керування</div>
+        {compact ? <div style={{ height: 20 }} /> : <div style={styles.brandSub}>Панель керування</div>}
 
         <nav style={styles.nav}>
           {NAV.map((item) => {
@@ -37,31 +39,33 @@ export function Layout({ active, onChange, children }: Props) {
               <button
                 key={item.id}
                 onClick={() => onChange(item.id)}
+                title={item.label}
                 style={{
                   ...styles.navItem,
+                  ...(compact ? { justifyContent: "center", padding: "12px 0" } : {}),
                   background: isActive ? "var(--surface-raised)" : "transparent",
                   color: isActive ? "var(--text)" : "var(--text-muted)",
                   borderLeftColor: isActive ? "var(--amber)" : "transparent",
                 }}
               >
-                <span style={styles.navHint}>{item.hint}</span>
-                <Icon size={16} strokeWidth={2} />
-                <span>{item.label}</span>
+                {!compact && <span style={styles.navHint}>{item.hint}</span>}
+                <Icon size={compact ? 18 : 16} strokeWidth={2} />
+                {!compact && <span>{item.label}</span>}
               </button>
             );
           })}
         </nav>
 
-        <div style={styles.sidebarFooter}>
+        <div style={{ ...styles.sidebarFooter, justifyContent: compact ? "center" : undefined }}>
           <span style={styles.dot} />
-          Firestore підключено
+          {!compact && "Firestore підключено"}
         </div>
       </aside>
 
       {/* Кеп (01.09): реєстр замовлень — ширші дані (user_id, статистика, кнопки), тому
           для цієї вкладки прибираємо загальне обмеження maxWidth:880, замінюємо на майже
           повну ширину. Інші вкладки лишаються без змін. */}
-      <main style={active === "registry" ? { ...styles.main, maxWidth: "calc(100vw - 232px - 48px)" } : styles.main}>{children}</main>
+      <main style={compact ? { ...styles.main, maxWidth: "none", padding: "16px 20px", minWidth: 0 } : active === "registry" ? { ...styles.main, maxWidth: "calc(100vw - 232px - 48px)" } : styles.main}>{children}</main>
     </div>
   );
 }

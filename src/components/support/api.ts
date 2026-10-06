@@ -40,7 +40,13 @@ export interface Chat {
   status: "new" | "in_progress" | "resolved" | "archived"; order_value: string | null; deal_status: string | null;
   route: string | null; trip_date: string | null; notes: string | null; unread: number; last_msg_at: string; created_at: string;
   visitor_name?: string | null; phone?: string | null; email?: string | null; manager_name?: string | null;
+  avatar_url?: string | null; priority?: boolean; labels?: string[] | null; lead_stage?: string | null;
+  ad_id?: string | null; ad_title?: string | null; ref_id?: string | null;
+  last_body?: string | null; last_sender?: "user" | "manager" | null; last_at?: string | null;
 }
+export interface Label { id: number; name: string; color: string }
+export interface QuickReply { id: number; category: string; body: string; owner_id: number | null }
+export const ORDER_STATUSES: Record<string, string> = { "": "—", booked: "Заброньовано", awaiting: "Очікує оплати", paid: "Оплачено", cancelled: "Скасовано" };
 export interface Message { id: number; sender_type: "user" | "manager"; body: string; channel: string; created_at: string }
 
 export const STATUS_LABELS: Record<string, string> = { new: "Новий", in_progress: "В роботі", resolved: "Вирішено", archived: "Архів" };
@@ -52,4 +58,20 @@ export const CHANNELS: Record<string, { label: string; color: string }> = {
   facebook: { label: "Facebook", color: "#4A8CFF" },
   instagram: { label: "Instagram", color: "#EC4899" },
   whatsapp: { label: "WhatsApp", color: "#22C55E" },
+  fb_comment: { label: "Коментар FB", color: "#4A8CFF" },
+  ig_comment: { label: "Коментар IG", color: "#EC4899" },
+  app: { label: "Застосунок", color: "#F5A623" },
 };
+// Вкладки джерел (Кеп, 06.10 — як у Meta Business Suite)
+export const SOURCES: { id: string; label: string; channels: string[] | null }[] = [
+  { id: "all", label: "Усі повідомлення", channels: null },
+  { id: "site", label: "Сайт", channels: ["chat"] },
+  { id: "app", label: "Застосунок", channels: ["app"] },
+  { id: "messenger", label: "Messenger", channels: ["facebook"] },
+  { id: "instagram", label: "Instagram", channels: ["instagram"] },
+  { id: "whatsapp", label: "WhatsApp", channels: ["whatsapp"] },
+  { id: "telegram", label: "Telegram", channels: ["telegram"] },
+  { id: "viber", label: "Viber", channels: ["viber"] },
+  { id: "fbc", label: "Коментарі у Facebook", channels: ["fb_comment"] },
+  { id: "igc", label: "Коментарі в Instagram", channels: ["ig_comment"] },
+];

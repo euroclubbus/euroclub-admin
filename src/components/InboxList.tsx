@@ -28,16 +28,16 @@ function fmtTime(v: unknown) {
     ? d.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })
     : d.toLocaleString("uk-UA", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
-function lastAt(t: FeedbackThread) {
+export function lastAt(t: FeedbackThread) {
   const last = t.messages?.[t.messages.length - 1];
   return Math.max(toMs(t.lastMessageAt), last?.at || 0);
 }
-function isUnread(t: FeedbackThread & { adminReadAt?: number }) {
+export function isUnread(t: FeedbackThread & { adminReadAt?: number }) {
   const last = t.messages?.[t.messages.length - 1];
   return !!last && last.from === "user" && (last.at || 0) > (t.adminReadAt || 0);
 }
 
-type Thread = FeedbackThread & { adminReadAt?: number };
+export type Thread = FeedbackThread & { adminReadAt?: number };
 
 interface BackendOrder { oid: string; status: number; legs: { from: string; to: string; date: string | null; open: boolean }[]; dsc: string[] }
 const STATUS: Record<number, string> = { 0: "скасовано", 1: "не сплачено", 2: "оплачено", 3: "відбулась" };
@@ -45,7 +45,7 @@ function fmtD(iso: string | null) {
   return iso ? iso.split("-").reverse().join(".") : "відкрита дата";
 }
 
-function Chat({ thread }: { thread: Thread }) {
+export function AppThreadChat({ thread }: { thread: Thread }) {
   // Кеп (06.10): поїздки — повна історія з беку (client_trips), не trip_reports застосунку.
   const [orders, setOrders] = useState<BackendOrder[] | null>(null);
   const [tripsState, setTripsState] = useState<"loading" | "ok" | "no_oid" | "error">("loading");
@@ -265,7 +265,7 @@ export function InboxList() {
           })}
         </div>
       </div>
-      {open ? <Chat thread={open} /> : <div style={{ ...s.chat, alignItems: "center", justifyContent: "center", ...s.muted }}>Оберіть діалог зліва</div>}
+      {open ? <AppThreadChat thread={open} /> : <div style={{ ...s.chat, alignItems: "center", justifyContent: "center", ...s.muted }}>Оберіть діалог зліва</div>}
     </div>
   );
 }

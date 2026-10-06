@@ -13,8 +13,8 @@ export function SupportCenter() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, gap: 12 }}>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 600, letterSpacing: "0.03em", margin: 0 }}>EUROCLUB SUPPORT CENTER</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 12 }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, letterSpacing: "0.03em", margin: 0 }}>EUROCLUB SUPPORT CENTER</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 12, color: "var(--text-muted)" }}>
           {me && <span>{me.name || me.login} · {me.role}</span>}
           {me && <button onClick={logout} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", display: "flex", gap: 4, alignItems: "center" }}><LogOut size={13} /> Вийти</button>}

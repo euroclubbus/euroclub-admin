@@ -9,10 +9,12 @@ const DEFAULT_QR: Record<string, string[]> = {
 };
 
 export function QuickReplies({ me }: { me: EcrmUser }) {
-  const canEdit = me.role !== "manager";
-  const [list, setList] = useState<{ id: number; category: string; body: string }[]>([]);
+  // Кеп (06.10): загальні шаблони (admin/superadmin) + особисті шаблони кожного менеджера
+  const isAdmin = me.role !== "manager";
+  const [list, setList] = useState<{ id: number; category: string; body: string; owner_id: number | null }[]>([]);
   const [cat, setCat] = useState("");
   const [body, setBody] = useState("");
+  const [personal, setPersonal] = useState(!isAdmin);
   const [err, setErr] = useState("");
   const load = () => apiGet("/api/quick-replies?action=list").then((d) => setList(d.data || [])).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, []);
@@ -23,39 +25,54 @@ export function QuickReplies({ me }: { me: EcrmUser }) {
     load();
   }
 
-  const cats = Array.from(new Set(list.map((r) => r.category)));
+  const section = (title: string, rows: typeof list, editable: boolean) => {
+    const cats = Array.from(new Set(rows.map((r) => r.category)));
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 8 }}>{title}</div>
+        {rows.length === 0 && <div style={muted}>Немає</div>}
+        {cats.map((c) => (
+          <div key={c} style={{ marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>{c}</div>
+            {rows.filter((r) => r.category === c).map((r) => (
+              <div key={r.id} style={row}>
+                {editable ? (
+                  <input style={{ ...input, flex: 1 }} defaultValue={r.body} onBlur={(e) => e.target.value !== r.body && act(apiPost("/api/quick-replies?action=update", { id: r.id, body: e.target.value }))} />
+                ) : <span style={{ flex: 1 }}>{r.body}</span>}
+                {editable && <button style={{ ...ghost, color: "#E5484D" }} onClick={() => confirm("Видалити?") && act(apiPost("/api/quick-replies?action=delete", { id: r.id }))}>✕</button>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const common = list.filter((r) => r.owner_id === null);
+  const mine = list.filter((r) => r.owner_id === me.id);
+  const allCats = Array.from(new Set(list.map((r) => r.category)));
   return (
     <div style={card}>
       {err && <div style={{ color: "#E5484D", fontSize: 12, marginBottom: 8 }}>{err}</div>}
-      {list.length === 0 && canEdit && (
+      {common.length === 0 && isAdmin && (
         <div style={{ marginBottom: 12 }}>
-          <span style={muted}>Швидких відповідей у базі ще немає. </span>
+          <span style={muted}>Загальних шаблонів ще немає. </span>
           <button style={ghost} onClick={importDefaults}>Додати стандартний набір</button>
         </div>
       )}
-      {cats.map((c) => (
-        <div key={c} style={{ marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>{c}</div>
-          {list.filter((r) => r.category === c).map((r) => (
-            <div key={r.id} style={row}>
-              {canEdit ? (
-                <input style={{ ...input, flex: 1 }} defaultValue={r.body} onBlur={(e) => e.target.value !== r.body && act(apiPost("/api/quick-replies?action=update", { id: r.id, body: e.target.value }))} />
-              ) : (
-                <span style={{ flex: 1 }}>{r.body}</span>
-              )}
-              {canEdit && <button style={{ ...ghost, color: "#E5484D" }} onClick={() => confirm("Видалити?") && act(apiPost("/api/quick-replies?action=delete", { id: r.id }))}>✕</button>}
-            </div>
-          ))}
-        </div>
-      ))}
-      {canEdit && (
-        <div style={{ ...row, marginTop: 8 }}>
-          <input style={{ ...input, width: 160 }} list="qr-cats" placeholder="Категорія" value={cat} onChange={(e) => setCat(e.target.value)} />
-          <datalist id="qr-cats">{cats.map((c) => <option key={c} value={c} />)}</datalist>
-          <input style={{ ...input, flex: 1 }} placeholder="Текст відповіді" value={body} onChange={(e) => setBody(e.target.value)} />
-          <button style={primary} disabled={!cat.trim() || !body.trim()} onClick={() => act(apiPost("/api/quick-replies?action=create", { category: cat.trim(), body: body.trim() }).then(() => setBody("")))}>Додати</button>
-        </div>
-      )}
+      {section("Загальні шаблони", common, isAdmin)}
+      {section("Мої шаблони", mine, true)}
+      <div style={{ ...row, marginTop: 8 }}>
+        <input style={{ ...input, width: 160 }} list="qr-cats" placeholder="Категорія" value={cat} onChange={(e) => setCat(e.target.value)} />
+        <datalist id="qr-cats">{allCats.map((c) => <option key={c} value={c} />)}</datalist>
+        <input style={{ ...input, flex: 1 }} placeholder="Текст відповіді" value={body} onChange={(e) => setBody(e.target.value)} />
+        {isAdmin && (
+          <label style={{ display: "flex", gap: 5, fontSize: 12, alignItems: "center" }}>
+            <input type="checkbox" checked={personal} onChange={(e) => setPersonal(e.target.checked)} /> лише мій
+          </label>
+        )}
+        <button style={primary} disabled={!cat.trim() || !body.trim()} onClick={() => act(apiPost("/api/quick-replies?action=create", { category: cat.trim(), body: body.trim(), personal }).then(() => setBody("")))}>Додати</button>
+      </div>
     </div>
   );
 }
