@@ -20,7 +20,7 @@ import { ClientProfiles } from "./components/ClientProfiles";
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState<Tab>("push");
+  const [tab, setTab] = useState<Tab>("registry");
   const [refreshKey, setRefreshKey] = useState(0);
   const [pushSection, setPushSection] = useState<"marketing" | "service">("marketing");
 

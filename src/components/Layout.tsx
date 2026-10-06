@@ -10,10 +10,10 @@ interface Props {
 }
 
 const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
-  { id: "push", label: "Розсилки", icon: Bell, hint: "01" },
-  { id: "menu", label: "Бокове меню", icon: ListTree, hint: "02" },
-  { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "03" },
-  { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "04" },
+  { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "01" },
+  { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "02" },
+  { id: "push", label: "Розсилки", icon: Bell, hint: "03" },
+  { id: "menu", label: "Бокове меню", icon: ListTree, hint: "04" },
   { id: "issues", label: "Технічні завдання", icon: AlertTriangle, hint: "05" },
   { id: "settings", label: "Налаштування", icon: Settings, hint: "06" },
 ];
