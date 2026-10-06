@@ -12,7 +12,7 @@ interface Rules { dedupHours: number; quietFrom: number; quietTo: number; maxPer
 const DEFAULT_RULES: Rules = { dedupHours: 24, quietFrom: 21, quietTo: 9, maxPerDayPerSender: 3 };
 
 async function api(method: string, body?: unknown, query = "") {
-  const r = await fetch(`/api/admin-users${query}`, { method, headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: body ? JSON.stringify(body) : undefined });
+  const r = await fetch(`/api/admin?action=users${query}`, { method, headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Помилка");
   return d;
@@ -56,7 +56,7 @@ export function Managers() {
             <label style={chk}><input type="checkbox" checked={m.canBypass} onChange={(e) => act(() => api("POST", { id: m.id, canBypass: e.target.checked }))} /> може обходити модерацію</label>
             <span style={muted}>{m.lastLoginAt ? `вхід ${new Date(m.lastLoginAt).toLocaleString("uk-UA")}` : "ще не входив"}</span>
             <button style={ghost} onClick={() => { const p = prompt(`Новий пароль для ${m.name} (мін. 6 символів)`); if (p) act(() => api("POST", { id: m.id, password: p })); }}>Пароль</button>
-            <button style={{ ...ghost, color: "var(--danger)" }} onClick={() => confirm(`Видалити ${m.name}?`) && act(() => api("DELETE", undefined, `?id=${m.id}`))}>Видалити</button>
+            <button style={{ ...ghost, color: "var(--danger)" }} onClick={() => confirm(`Видалити ${m.name}?`) && act(() => api("DELETE", undefined, `&id=${m.id}`))}>Видалити</button>
           </div>
         ))}
         {list.length === 0 && <div style={muted}>Менеджерів ще немає</div>}

@@ -139,7 +139,7 @@ export function SegmentPanel({ onApply, onClose }: { onApply: (t: SegmentTarget)
     setSync("Синхронізація…");
     try {
       for (let i = 0; i < 500; i++) {
-        const r = await fetch("/api/clients-sync", { method: "POST", headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: JSON.stringify({ cursor }) });
+        const r = await fetch("/api/admin?action=clients-sync", { method: "POST", headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: JSON.stringify({ cursor }) });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || "Помилка");
         setSync(`Синхронізація… ${d.next} з ${d.total}`);

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, hashPassword, readSession } from "./_lib/session.js";
+import { adminDb, hashPassword, readSession } from "./session.js";
 
 // Керування менеджерами — тільки власник. Паролі зберігаються лише як scrypt-хеш.
 export default async function handler(req: VercelRequest, res: VercelResponse) {

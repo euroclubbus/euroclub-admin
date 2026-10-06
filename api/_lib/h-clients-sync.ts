@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, ownerPassword, readSession } from "./_lib/session.js";
+import { adminDb, ownerPassword, readSession } from "./session.js";
 
 // Кеп (06.10): історія ВСІХ поїздок клієнта з беку для сегментації. Беремо будь-який
 // відомий oid клієнта (order_registry) → oid2user-orders → повна історія, всі канали.

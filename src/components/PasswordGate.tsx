@@ -23,7 +23,7 @@ export function PasswordGate({ onUnlock }: Props) {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/admin-login", {
+      const r = await fetch("/api/admin?action=login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ login: login.trim(), password: value }),

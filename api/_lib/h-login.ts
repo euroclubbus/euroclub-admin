@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, checkPassword, ownerPassword, signSession, AdminSession } from "./_lib/session.js";
+import { adminDb, checkPassword, ownerPassword, signSession, AdminSession } from "./session.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Метод не підтримується" });
