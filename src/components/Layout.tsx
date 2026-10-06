@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
-import { Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
+import { Headphones, Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
 
-export type Tab = "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings";
+export type Tab = "support" | "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings";
 
 interface Props {
   active: Tab;
@@ -12,10 +12,11 @@ interface Props {
 const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "01" },
   { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "02" },
-  { id: "push", label: "Розсилки", icon: Bell, hint: "03" },
-  { id: "menu", label: "Бокове меню", icon: ListTree, hint: "04" },
-  { id: "issues", label: "Технічні завдання", icon: AlertTriangle, hint: "05" },
-  { id: "settings", label: "Налаштування", icon: Settings, hint: "06" },
+  { id: "support", label: "Support Center", icon: Headphones, hint: "03" },
+  { id: "push", label: "Розсилки", icon: Bell, hint: "04" },
+  { id: "menu", label: "Бокове меню", icon: ListTree, hint: "05" },
+  { id: "issues", label: "Технічні завдання", icon: AlertTriangle, hint: "06" },
+  { id: "settings", label: "Налаштування", icon: Settings, hint: "07" },
 ];
 
 export function Layout({ active, onChange, children }: Props) {

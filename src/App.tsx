@@ -3,6 +3,7 @@ import { PasswordGate } from "./components/PasswordGate";
 import { Layout, Tab } from "./components/Layout";
 import { Broadcasts } from "./components/Broadcasts";
 import { TabGroup } from "./components/TabGroup";
+import { SupportCenter } from "./components/SupportCenter";
 import { SideMenuList } from "./components/SideMenuList";
 import { FleetList } from "./components/FleetList";
 import { PagesList } from "./components/PagesList";
@@ -39,6 +40,8 @@ export default function App() {
           { id: "routes", label: "Маршрути", render: () => <RoutesList /> },
           { id: "pages", label: "Сторінки", render: () => <PagesList /> },
         ]} />
+      ) : tab === "support" ? (
+        <SupportCenter />
       ) : tab === "registry" ? (
         <OrderRegistry />
       ) : tab === "marketing" ? (
