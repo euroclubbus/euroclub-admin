@@ -37,6 +37,10 @@ function normalizePassengers(list: OrderRegistryPassenger[]): OrderRegistryPasse
   });
 }
 
+function localDay(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Kyiv" }).format(d);
+}
+
 interface ClientStats { total: number; done: number; cancelled: number; app1: number; app2: number; other: number }
 
 function OrderRow({ order, userStats, selected, onToggleSelect }: { order: OrderRegistryDoc; userStats: ClientStats | null; selected: boolean; onToggleSelect: () => void }) {
@@ -511,17 +515,18 @@ export function OrderRegistry() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   // Фільтр за датою БРОНЮВАННЯ (createdAt, ISO) — від/до, окремо від дати поїздки.
-  const [bookingDateFrom, setBookingDateFrom] = useState("");
-  const [bookingDateTo, setBookingDateTo] = useState("");
+  // Кеп (06.10): на вході завжди «сьогодні» (дата бронювання, київський день).
+  const [bookingDateFrom, setBookingDateFrom] = useState(() => localDay(new Date()));
+  const [bookingDateTo, setBookingDateTo] = useState(() => localDay(new Date()));
   // Один блок замість двох поруч (Кеп, 17.08) — перемикач, який з двох фільтрів дат
   // активний зараз. Значення обох лишаються в стейті незалежно, просто показуємо на екрані
   // тільки один пара полів за раз.
-  const [dateFilterMode, setDateFilterMode] = useState<"trip" | "booking">("trip");
+  const [dateFilterMode, setDateFilterMode] = useState<"trip" | "booking">("booking");
   // Кеп (01.09): пресети "звіт по днях" — застосовуються до ДАТИ БРОНЮВАННЯ (booking),
   // бо це про активність "скільки замовлень зроблено", не про дату самої поїздки.
   type DayPreset = "today" | "yesterday" | "week" | "last7" | "lastMonth" | "all" | "custom";
-  const [activePreset, setActivePreset] = useState<DayPreset>("all");
-  const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
+  const [activePreset, setActivePreset] = useState<DayPreset>("today");
+  const fmtDate = localDay;
   const applyPreset = (preset: DayPreset) => {
     setActivePreset(preset);
     setDateFilterMode("booking");
@@ -753,6 +758,32 @@ export function OrderRegistry() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, orders.length]);
 
+  // Кеп (06.10): автооновлення тільки для діапазону до 7 днів; більше — лише кнопкою з підтвердженням.
+  const rangeDays = (() => {
+    const from = dateFilterMode === "booking" ? bookingDateFrom : dateFrom;
+    const to = dateFilterMode === "booking" ? bookingDateTo : dateTo;
+    if (!from || !to) return Infinity;
+    return Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1;
+  })();
+  const autoKeyRef = useRef("");
+  useEffect(() => {
+    if (loading || rangeDays > 7 || filtered.length === 0) return;
+    const key = filtered.map((o) => o.orderNo).sort().join(",");
+    if (key === autoKeyRef.current) return;
+    const t = setTimeout(() => {
+      autoKeyRef.current = key;
+      bulkRefresh();
+      refreshAllRealTotals(filtered.filter((o) => !clientStats[(o.backendUserId ?? o.userId) as string]));
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, rangeDays, filtered]);
+  const manualRefresh = () => {
+    if (rangeDays > 7 && !window.confirm(`Оновити дані для ${filtered.length} замовлень? Діапазон більше 7 днів — це може зайняти кілька хвилин.`)) return;
+    bulkRefresh();
+    refreshAllRealTotals(filtered);
+  };
+
   return (
     <div>
       <header style={{ marginBottom: 20 }}>
@@ -927,7 +958,7 @@ export function OrderRegistry() {
         <div style={{ ...styles.summaryBar, marginTop: 0, marginBottom: 16 }}>
           <span><strong>{summary.total}</strong> замовлень у списку</span>
           <span style={{ flex: 1 }} />
-          <button onClick={() => { bulkRefresh(); refreshAllRealTotals(filtered); }} disabled={bulkRefreshing || realTotalLoading} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId — включно зі справжньою кількістю замовлень по всіх джерелах">
+          <button onClick={manualRefresh} disabled={bulkRefreshing || realTotalLoading} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId — включно зі справжньою кількістю замовлень по всіх джерелах">
             {bulkRefreshing || realTotalLoading ? "Оновлюю…" : `Оновити ці ${summary.total}`}
           </button>
           {bulkResult && (
@@ -965,7 +996,7 @@ export function OrderRegistry() {
           <span style={styles.summaryDot}>·</span>
           <span>{summary.passengers} пасажирів</span>
           <span style={{ flex: 1 }} />
-          <button onClick={() => { bulkRefresh(); refreshAllRealTotals(filtered); }} disabled={bulkRefreshing || realTotalLoading} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId — включно зі справжньою кількістю замовлень по всіх джерелах">
+          <button onClick={manualRefresh} disabled={bulkRefreshing || realTotalLoading} style={styles.bulkRefreshBtn} title="Оновлює тільки поточний відфільтрований список (звузьте фільтром дату/маршрут), дедублікує запити по userId — включно зі справжньою кількістю замовлень по всіх джерелах">
             {bulkRefreshing || realTotalLoading ? "Оновлюю…" : `Оновити ці ${summary.total}`}
           </button>
           {bulkResult && (
