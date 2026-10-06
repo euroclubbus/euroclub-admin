@@ -78,7 +78,6 @@ function Chat({ thread }: { thread: Thread }) {
     }, () => setTripsState("error")); // напр. немає правила Firestore для client_trips
   }, [thread.userId]);
 
-  const tripCount = (orders || []).filter((o) => o.status !== 0).reduce((n, o) => n + o.legs.filter((l) => !l.open && l.date).length, 0);
   const sortedOrders = [...(orders || [])].sort((a, b) => (b.legs[0]?.date || "").localeCompare(a.legs[0]?.date || ""));
 
   // Позначаємо діалог прочитаним, коли він відкритий і прийшло нове.
@@ -130,7 +129,7 @@ function Chat({ thread }: { thread: Thread }) {
           <div style={s.muted}>останнє: {fmtTime(lastAt(thread)) || "—"}</div>
         </div>
         <button style={{ ...s.headBtn, ...(showTrips ? s.headBtnOn : {}) }} onClick={() => setShowTrips((v) => !v)}>
-          <Bus size={14} /> {tripsState === "ok" ? `${tripCount} поїздок` : tripsState === "loading" ? "…" : tripsState === "no_oid" ? "немає історії" : "помилка"}
+          <Bus size={14} /> {tripsState === "ok" ? `${(orders || []).length} замовлень · ${(orders || []).filter((o) => o.status === 3).length} виконаних` : tripsState === "loading" ? "…" : tripsState === "no_oid" ? "немає історії" : "помилка"}
         </button>
         <button style={{ ...s.headBtn, color: "#E5484D" }} onClick={clearChat} title="Очистити чат">
           <Trash2 size={14} />
