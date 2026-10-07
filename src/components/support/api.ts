@@ -47,7 +47,7 @@ export interface Chat {
 export interface Label { id: number; name: string; color: string }
 export interface QuickReply { id: number; category: string; body: string; owner_id: number | null }
 export const ORDER_STATUSES: Record<string, string> = { "": "—", booked: "Заброньовано", awaiting: "Очікує оплати", paid: "Оплачено", cancelled: "Скасовано" };
-export interface Message { id: number; sender_type: "user" | "manager"; body: string; channel: string; created_at: string }
+export interface Message { id: number; sender_type: "user" | "manager"; sender_id?: number | null; body: string | null; channel: string; created_at: string; edited_at?: string | null; deleted?: boolean }
 
 export const STATUS_LABELS: Record<string, string> = { new: "Новий", in_progress: "В роботі", resolved: "Вирішено", archived: "Архів" };
 export const DEAL_STATUSES: Record<string, string> = { new: "Новий лід", consideration: "Розглядає", negotiation: "Перемовини", won: "Куплено", lost: "Втрачено", support: "Підтримка" };

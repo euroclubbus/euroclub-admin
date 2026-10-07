@@ -79,7 +79,7 @@ export function QuickReplies({ me }: { me: EcrmUser }) {
 
 export function Users({ me }: { me: EcrmUser }) {
   const isSuper = me.role === "superadmin";
-  const [list, setList] = useState<{ id: number; login: string; name: string; email: string; role: string; active: boolean }[]>([]);
+  const [list, setList] = useState<{ id: number; login: string; name: string; email: string; role: string; active: boolean; euroclub_manager_id: number | null }[]>([]);
   const [f, setF] = useState({ login: "", password: "", name: "", role: "manager" });
   const [err, setErr] = useState("");
   const load = () => apiGet("/api/users?action=list").then((d) => setList(d.data || [])).catch((e) => setErr(e.message));
@@ -93,6 +93,10 @@ export function Users({ me }: { me: EcrmUser }) {
         <div key={u.id} style={row}>
           <b style={{ minWidth: 160 }}>{u.name || u.login}</b>
           <span style={muted}>логін: {u.login}</span>
+          {isSuper ? (
+            <input style={{ ...input, width: 130 }} placeholder="ID менеджера EuroClub" defaultValue={u.euroclub_manager_id ?? ""} title="ID менеджера на беку EuroClub — йде в замовлення як manager_id"
+              onBlur={(e) => e.target.value !== String(u.euroclub_manager_id ?? "") && act(apiPost("/api/users?action=update", { id: u.id, euroclub_manager_id: e.target.value.trim() || null }))} />
+          ) : <span style={muted}>ID EuroClub: {u.euroclub_manager_id ?? "—"}</span>}
           {isSuper ? (
             <select style={input} value={u.role} onChange={(e) => act(apiPost("/api/users?action=update", { id: u.id, role: e.target.value }))}>
               <option value="superadmin">SuperAdmin</option><option value="admin">Admin</option><option value="manager">Manager</option>
@@ -146,3 +150,64 @@ const input: React.CSSProperties = { padding: "7px 9px", borderRadius: 8, border
 const ghost: React.CSSProperties = { padding: "6px 10px", borderRadius: 8, border: "1px solid var(--hairline)", background: "transparent", color: "inherit", cursor: "pointer", fontSize: 12 };
 const primary: React.CSSProperties = { padding: "7px 14px", borderRadius: 8, border: "none", background: "var(--amber)", color: "#111", fontWeight: 700, cursor: "pointer" };
 const muted: React.CSSProperties = { color: "var(--text-muted)", fontSize: 12 };
+
+// Рейтинги менеджерів (дані з бази Support Center). Admin/superadmin бачить усіх і імпортує CSV.
+function parseCsvLine(line: string): string[] {
+  const sep = line.includes(";") ? ";" : ",";
+  const out: string[] = []; let cur = ""; let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+    else if (c === sep && !q) { out.push(cur); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+export function Ratings({ me }: { me: EcrmUser }) {
+  const isAdmin = me.role !== "manager";
+  const [rows, setRows] = useState<any[]>([]);
+  const [err, setErr] = useState("");
+  const load = () => apiGet("/api/stats?action=ratings").then((d) => setRows(d.data || [])).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+
+  async function importCsv(file: File) {
+    const text = (await file.text()).replace(/^\uFEFF/, "");
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    const data = lines.slice(1).map(parseCsvLine).filter((c) => c.length >= 13).map((c) => ({
+      manager: c[0].trim(), total: parseInt(c[3]) || 0, targeted: parseInt(c[4]) || 0, nonTargeted: parseInt(c[5]) || 0,
+      consultations: parseInt(c[6]) || 0, purchases: parseInt(c[7]) || 0, speed: c[8].trim(), converted: parseInt(c[9]) || 0,
+      lost: parseInt(c[10]) || 0, score: parseFloat(String(c[11]).replace(",", ".")), recommendations: c[12].trim(),
+    }));
+    try { await apiPost("/api/stats?action=ratings", { rows: data }); alert(`Імпортовано оцінок: ${data.length}`); load(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Помилка імпорту"); }
+  }
+
+  const best = rows.length ? Math.max(...rows.map((r) => Number(r.score) || 0)) : 0;
+  return (
+    <div style={card}>
+      {err && <div style={{ color: "#E5484D", fontSize: 12, marginBottom: 8 }}>{err}</div>}
+      {isAdmin && (
+        <label style={{ ...ghost, display: "inline-block", marginBottom: 12 }}>
+          Імпорт CSV
+          <input type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ""; }} />
+        </label>
+      )}
+      {rows.length === 0 && <div style={muted}>Оцінок ще немає</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
+        {rows.map((r) => (
+          <div key={r.id} style={{ border: `1px solid ${Number(r.score) === best ? "var(--amber)" : "var(--hairline)"}`, borderRadius: 10, padding: 12 }}>
+            {Number(r.score) === best && <div style={{ color: "var(--amber)", fontSize: 11, fontWeight: 700 }}>Лідер</div>}
+            <div style={{ fontWeight: 700 }}>{r.manager_name}</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>{r.score != null ? Number(r.score).toFixed(1) : "—"}</div>
+            <div style={muted}>Звернень {r.total} · цільових {r.targeted} · нецільових {r.non_targeted}</div>
+            <div style={muted}>Консультацій {r.consultations} · покупок {r.purchases} · конверсія {r.converted} · втрачено {r.lost}</div>
+            <div style={muted}>Швидкість відповіді: {r.speed || "—"}</div>
+            {r.recommendations && <div style={{ fontSize: 12, marginTop: 6 }}>{r.recommendations}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
-import { Check, Search, Send, Star, Zap } from "lucide-react";
+import { Check, Lock, Pencil, Search, Send, Star, Trash2, Zap } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { AppThreadChat, isUnread as appUnread, lastAt as appLastAt, Thread } from "../InboxList";
 import { apiGet, apiPost, AuthError, Chat, CHANNELS, DEAL_STATUSES, EcrmUser, Label, Message, ORDER_STATUSES, QuickReply, SOURCES, STATUS_LABELS } from "./api";
-import { Booked, Booking } from "./Booking";
+import { Booking } from "./Booking";
 
 // Кеп (06.10): Support Center у стилі Meta Business Suite — усі чати (месенджери, сайт,
 // коментарі, застосунок) в одній папці, вкладки джерел, фільтри, чат по центру,
@@ -195,7 +195,7 @@ export function Chats({ me, onAuthLost }: { me: EcrmUser; onAuthLost: () => void
           <>
             <AppThreadChat key={open.key} thread={open.thread} />
             <div style={s.right}>
-              <Booking chat={{ visitor_name: "", phone: "", email: "" } as Chat} me={me} onBooked={() => {}} />
+              <Booking chat={{ visitor_name: "", phone: "", email: "" } as Chat} me={me} onSend={async () => { throw new Error("Для чатів застосунку надішліть текст вручну"); }} />
               <div style={s.muted}>Клієнт із застосунку · ID {open.thread.userId}. Відповідь іде йому push-сповіщенням.</div>
             </div>
           </>
@@ -235,6 +235,19 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
     lastCount.current = msgs.length;
   }, [msgs.length]);
 
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editText, setEditText] = useState("");
+  const [side, setSide] = useState<"booking" | "client">("booking");
+  // Сайт-чат: клієнт бачить зміни у віджеті; у месенджерах лишається оригінал (їх API не дозволяє відкликати).
+  const editNote = chat.channel === "chat" ? "" : "\n\nУ клієнта в месенджері лишиться оригінал — месенджери не дозволяють змінювати надіслане.";
+  async function saveEdit(id: number) {
+    if (!editText.trim()) return;
+    try { await apiPost("/api/messages?action=edit", { id, body: editText }); setEditId(null); loadMsgs(); } catch (e) { guard(e); }
+  }
+  async function delMsg(id: number) {
+    if (!confirm(`Видалити повідомлення?${editNote}`)) return;
+    try { await apiPost("/api/messages?action=delete", { id }); loadMsgs(); } catch (e) { guard(e); }
+  }
   const update = (patch: Record<string, unknown>) => apiPost("/api/chats?action=update", { id: chat.id, ...patch }).then(onChanged).catch(guard);
 
   async function send(body = text) {
@@ -247,12 +260,6 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
       await loadMsgs();
       onChanged();
     } catch (e) { guard(e); } finally { setSending(false); }
-  }
-
-  async function onBooked(b: Booked) {
-    await send(b.summary);
-    const note = `[${new Date().toLocaleString("uk-UA")}] Замовлення №${b.oid}: ${b.route}, ${b.date}, ${b.total} (${me.name || me.login})`;
-    await update({ route: b.route, trip_date: b.date, order_value: b.total, deal_status: "won", lead_stage: "booked", notes: chat.notes ? `${chat.notes}\n${note}` : note });
   }
 
   const mine = qr.filter((r) => r.owner_id === me.id);
@@ -283,11 +290,29 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
           {msgs.length === 0 && <div style={{ ...s.muted, textAlign: "center", marginTop: 40 }}>Повідомлень немає</div>}
           {msgs.map((m) => {
             const my = m.sender_type === "manager";
+            const canEdit = my && !m.deleted && (me.role !== "manager" || m.sender_id === me.id);
             return (
               <div key={m.id} style={{ display: "flex", justifyContent: my ? "flex-end" : "flex-start" }}>
-                <div style={{ ...s.bubble, ...(my ? s.mine : s.theirs) }}>
-                  <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>
-                  <div style={s.meta}>{hm(m.created_at)}</div>
+                <div style={{ ...s.bubble, ...(my ? s.mine : s.theirs), ...(m.deleted ? { opacity: 0.5, fontStyle: "italic" } : {}) }}>
+                  {editId === m.id ? (
+                    <>
+                      <textarea autoFocus style={{ width: 300, minHeight: 70, borderRadius: 8, border: "none", padding: 6, fontFamily: "inherit", fontSize: 13, color: "#111" }} value={editText} onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(m.id); } if (e.key === "Escape") setEditId(null); }} />
+                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", fontSize: 12, marginTop: 4 }}>
+                        <button style={s.linkBtn} onClick={() => setEditId(null)}>Скасувати</button>
+                        <button style={{ ...s.linkBtn, fontWeight: 700 }} onClick={() => saveEdit(m.id)}>Зберегти</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.deleted ? "Повідомлення видалено" : m.body}</div>
+                      <div style={{ ...s.meta, display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+                        {canEdit && <button title="Редагувати" style={s.linkBtn} onClick={() => { setEditId(m.id); setEditText(m.body || ""); }}><Pencil size={11} /></button>}
+                        {canEdit && <button title="Видалити" style={s.linkBtn} onClick={() => delMsg(m.id)}><Trash2 size={11} /></button>}
+                        <span>{hm(m.created_at)}{m.edited_at && !m.deleted ? " · ред." : ""}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -330,8 +355,16 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
       </div>
 
       <div style={s.right}>
-        <Booking chat={chat} me={me} onBooked={onBooked} />
-        <ClientCard chat={chat} labels={labels} onLabels={onLabels} update={update} />
+        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+          {(["booking", "client"] as const).map((k) => (
+            <button key={k} onClick={() => setSide(k)} style={{ ...s.chip, flex: 1, ...(side === k ? s.chipOn : {}) }}>{k === "booking" ? "Бронювання" : "Клієнт"}</button>
+          ))}
+        </div>
+        {side === "booking" ? (
+          <Booking key={chat.id} chat={chat} me={me} onSend={async (t) => { await send(t); }} />
+        ) : (
+          <ClientCard chat={chat} labels={labels} onLabels={onLabels} update={update} />
+        )}
       </div>
     </>
   );
@@ -339,58 +372,37 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
 
 const PALETTE = ["#F5A623", "#22C55E", "#3B82F6", "#EC4899", "#8B5CF6", "#E5484D", "#14B8A6"];
 
-function ClientCard({ chat, labels, onLabels, update }: { chat: Chat; labels: Label[]; onLabels: () => void; update: (p: Record<string, unknown>) => Promise<unknown> }) {
-  const [f, setF] = useState({ name: chat.visitor_name || "", phone: chat.phone || "", email: chat.email || "", notes: chat.notes || "" });
-  const [newLabel, setNewLabel] = useState("");
-  const orig: Record<string, string> = { name: chat.visitor_name || "", phone: chat.phone || "", email: chat.email || "", notes: chat.notes || "" };
-  const blur = (k: keyof typeof f) => f[k] !== orig[k] && update({ [k]: f[k] });
+// Кеп (07.10): картка клієнта ЗАМОРОЖЕНА — переглядати можна, редагувати ні (поки немає
+// безпечного місця для зберігання персональних даних).
+function ClientCard({ chat, labels }: { chat: Chat; labels: Label[]; onLabels: () => void; update: (p: Record<string, unknown>) => Promise<unknown> }) {
+  const ro = (label: string, value?: string | number | null) => (
+    <label style={s.lbl}>
+      {label}
+      <input style={{ ...s.field, opacity: 0.7 }} value={value == null ? "" : String(value)} readOnly disabled />
+    </label>
+  );
   const cur = chat.labels || [];
-  const toggle = (n: string) => update({ labels: cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n] });
-  async function addLabel() {
-    const n = newLabel.trim();
-    if (!n) return;
-    await apiPost("/api/chats?action=label-create", { name: n, color: PALETTE[labels.length % PALETTE.length] });
-    setNewLabel("");
-    onLabels();
-    update({ labels: [...cur, n] });
-  }
   return (
     <div style={{ fontSize: 13 }}>
-      <b style={{ display: "block", marginBottom: 6 }}>Інформація</b>
-      {(["name", "phone", "email"] as const).map((k) => (
-        <label key={k} style={s.lbl}>
-          {k === "name" ? "Ім'я" : k === "phone" ? "Телефон" : "Email"}
-          <input style={s.field} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} onBlur={() => blur(k)} />
-        </label>
-      ))}
-      <label style={s.lbl}>
-        Етап ліда
-        <select style={s.field} value={chat.deal_status || "new"} onChange={(e) => update({ deal_status: e.target.value })}>
-          {Object.entries(DEAL_STATUSES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </label>
-      <label style={s.lbl}>
-        Статус замовлення
-        <select style={s.field} value={chat.lead_stage || ""} onChange={(e) => update({ lead_stage: e.target.value })}>
-          {Object.entries(ORDER_STATUSES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </label>
-      {(chat.route || chat.trip_date || chat.order_value) && (
-        <div style={{ ...s.muted, marginBottom: 8 }}>Останнє: {chat.route} {chat.trip_date} {chat.order_value ? `· ${chat.order_value}` : ""}</div>
-      )}
-      <div style={s.lbl}>Ярлики</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 6 }}>
-        {labels.map((l) => (
-          <button key={l.id} onClick={() => toggle(l.name)} style={{ ...s.badge, cursor: "pointer", background: cur.includes(l.name) ? l.color : "transparent", color: cur.includes(l.name) ? "#111" : l.color, borderColor: l.color, padding: "3px 8px" }}>{l.name}</button>
-        ))}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: "rgba(245,166,35,0.12)", color: "var(--amber)", fontSize: 12, marginBottom: 10 }}>
+        <Lock size={13} /> Картка клієнта заморожена — лише перегляд
       </div>
-      <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
-        <input style={{ ...s.field, flex: 1 }} placeholder="Новий ярлик" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addLabel()} />
-        <button style={s.primary} onClick={addLabel} disabled={!newLabel.trim()}>+</button>
+      {ro("Ім'я", chat.visitor_name)}
+      {ro("Телефон", chat.phone)}
+      {ro("Email", chat.email)}
+      {ro("Етап ліда", DEAL_STATUSES[chat.deal_status || "new"])}
+      {ro("Статус замовлення", ORDER_STATUSES[chat.lead_stage || ""])}
+      {ro("Маршрут", chat.route)}
+      {ro("Дата поїздки", chat.trip_date)}
+      {ro("Сума", chat.order_value)}
+      <div style={s.lbl}>Ярлики</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
+        {cur.length === 0 && <span style={s.muted}>—</span>}
+        {cur.map((n) => { const l = labels.find((x) => x.name === n); return <span key={n} style={{ ...s.badge, color: l?.color || "#aaa", borderColor: l?.color || "#aaa" }}>{n}</span>; })}
       </div>
       <label style={s.lbl}>
         Нотатки
-        <textarea style={{ ...s.field, minHeight: 80, resize: "vertical", fontFamily: "inherit" }} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} onBlur={() => blur("notes")} />
+        <textarea style={{ ...s.field, minHeight: 80, fontFamily: "inherit", opacity: 0.7 }} value={chat.notes || ""} readOnly disabled />
       </label>
     </div>
   );
@@ -435,4 +447,5 @@ const s: Record<string, React.CSSProperties> = {
   lbl: { display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, color: "var(--text-muted)", marginBottom: 8 },
   field: { padding: "7px 9px", borderRadius: 8, border: "1px solid var(--hairline)", background: "transparent", color: "var(--text, inherit)", fontSize: 13 },
   muted: { color: "var(--text-muted)", fontSize: 12 },
+  linkBtn: { background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", display: "flex", alignItems: "center" },
 };

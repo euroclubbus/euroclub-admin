@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { ExternalLink, LogOut } from "lucide-react";
 import { apiPost, ECRM, EcrmUser, getEcrmUser, getToken, setAuth } from "./support/api";
 import { Chats } from "./support/Chats";
-import { QuickReplies, Users } from "./support/Manage";
+import { QuickReplies, Ratings, Users } from "./support/Manage";
 import { TabGroup } from "./TabGroup";
 
 // Кеп (06.10): EUROCLUB SUPPORT CENTER перенесено в адмінку (інтерфейс). Сервер, база Neon,
@@ -18,7 +18,7 @@ export function SupportCenter() {
         <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 12, color: "var(--text-muted)" }}>
           {me && <span>{me.name || me.login} · {me.role}</span>}
           {me && <button onClick={logout} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", display: "flex", gap: 4, alignItems: "center" }}><LogOut size={13} /> Вийти</button>}
-          <a href={ECRM} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, color: "inherit" }}><ExternalLink size={13} /> Стара версія</a>
+          <a href={`${ECRM}/legacy.html`} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, color: "inherit" }}><ExternalLink size={13} /> Стара версія</a>
         </div>
       </div>
       {!me ? (
@@ -27,6 +27,7 @@ export function SupportCenter() {
         <TabGroup tabs={[
           { id: "chats", label: "Чати", render: () => <Chats me={me} onAuthLost={logout} /> },
           { id: "qr", label: "Швидкі відповіді", render: () => <QuickReplies me={me} /> },
+          { id: "ratings", label: "Рейтинги", render: () => <Ratings me={me} /> },
           ...(me.role !== "manager" ? [{ id: "users", label: "Користувачі", render: () => <Users me={me} /> }] : []),
         ]} />
       )}

@@ -25,6 +25,13 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [pushSection, setPushSection] = useState<"marketing" | "service">("marketing");
 
+  // Кеп (07.10): Support Center працює і як окрема сторінка (#support) — без пароля адмінки,
+  // лише свій вхід Support Center. Сюди ж перенаправляє стара адреса ecrm-fwbs.vercel.app,
+  // тож інтерфейс один і зміни видно всюди одразу.
+  if (typeof window !== "undefined" && window.location.hash === "#support") {
+    return <div style={{ padding: "16px 20px" }}><SupportCenter /></div>;
+  }
+
   if (!unlocked) {
     return <PasswordGate onUnlock={() => setUnlocked(true)} />;
   }
