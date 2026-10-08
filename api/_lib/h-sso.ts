@@ -39,9 +39,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const key = await secret();
   if (!key) return page(res, 500, "Ключ входу ще не налаштовано в адмінці.");
 
+  // Кеп (08.10): пробуємо варіанти ключа (буквальне "\\n" або справжній перенос рядка, пробіли по краях),
+  // бо в PHP рядок в одинарних лапках не перетворює \n — щоб розбіжність у копіюванні не блокувала вхід.
   const payload = time ? `${name}|${id}|${access}|${time}` : `${name}|${id}|${access}`;
-  const expected = crypto.createHmac("sha256", key).update(payload).digest("hex");
-  if (sign.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sign), Buffer.from(expected))) return page(res, 403, "Невірний підпис входу.");
+  const keys = Array.from(new Set([key, key.trim(), key.replace(/\\n/g, "\n"), key.replace(/\n/g, "\\n")]));
+  const ok = keys.some((k) => {
+    const expected = crypto.createHmac("sha256", k).update(payload, "utf8").digest("hex");
+    return sign.length === expected.length && crypto.timingSafeEqual(Buffer.from(sign), Buffer.from(expected));
+  });
+  if (!ok) {
+    const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+    return page(res, 403, `Невірний підпис входу.<pre style="color:#aaa;font-size:12px;margin-top:20px">Діагностика (покажіть розробнику):
+name: "${esc(name)}" (${Buffer.byteLength(name)} байт)
+id: "${esc(id)}"
+access: "${esc(access)}"
+time: "${esc(time)}" (зараз ${Math.floor(Date.now() / 1000)})
+рядок підпису: "${esc(payload)}"
+sign отримано: ${esc(sign)}
+довжина ключа в адмінці: ${key.length} символів
+content-type: ${esc(String(req.headers["content-type"] || ""))}</pre>`);
+  }
   if (time && Math.abs(Date.now() / 1000 - Number(time)) > 300) return page(res, 403, "Посилання застаріло — відкрийте його із системи ще раз.");
 
   const ref = adminDb().collection("admin_users").doc(`m_${id}`);
