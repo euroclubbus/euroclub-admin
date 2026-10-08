@@ -238,6 +238,8 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
   const [editId, setEditId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [side, setSide] = useState<"booking" | "client">("booking");
+  // Кеп (08.10): картка клієнта — лише для Meta (Messenger / Instagram), дані беремо з Meta.
+  const isMeta = ["facebook", "instagram", "fb_comment", "ig_comment"].includes(chat.channel);
   // Сайт-чат: клієнт бачить зміни у віджеті; у месенджерах лишається оригінал (їх API не дозволяє відкликати).
   const editNote = chat.channel === "chat" ? "" : "\n\nУ клієнта в месенджері лишиться оригінал — месенджери не дозволяють змінювати надіслане.";
   async function saveEdit(id: number) {
@@ -355,15 +357,17 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
       </div>
 
       <div style={s.right}>
-        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-          {(["booking", "client"] as const).map((k) => (
-            <button key={k} onClick={() => setSide(k)} style={{ ...s.chip, flex: 1, ...(side === k ? s.chipOn : {}) }}>{k === "booking" ? "Бронювання" : "Клієнт"}</button>
-          ))}
-        </div>
-        {side === "booking" ? (
-          <Booking key={chat.id} chat={chat} me={me} onSend={async (t) => { await send(t); }} />
+        {isMeta && (
+          <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+            {(["booking", "client"] as const).map((k) => (
+              <button key={k} onClick={() => setSide(k)} style={{ ...s.chip, flex: 1, ...(side === k ? s.chipOn : {}) }}>{k === "booking" ? "Бронювання" : "Клієнт"}</button>
+            ))}
+          </div>
+        )}
+        {isMeta && side === "client" ? (
+          <MetaCard chat={chat} />
         ) : (
-          <ClientCard chat={chat} labels={labels} onLabels={onLabels} update={update} />
+          <Booking key={chat.id} chat={chat} me={me} onSend={async (t) => { await send(t); }} />
         )}
       </div>
     </>
@@ -372,38 +376,46 @@ function EcrmChat({ chat, me, labels, onLabels, onChanged, guard }: { chat: Chat
 
 const PALETTE = ["#F5A623", "#22C55E", "#3B82F6", "#EC4899", "#8B5CF6", "#E5484D", "#14B8A6"];
 
-// Кеп (07.10): картка клієнта ЗАМОРОЖЕНА — переглядати можна, редагувати ні (поки немає
-// безпечного місця для зберігання персональних даних).
-function ClientCard({ chat, labels }: { chat: Chat; labels: Label[]; onLabels: () => void; update: (p: Record<string, unknown>) => Promise<unknown> }) {
-  const ro = (label: string, value?: string | number | null) => (
-    <label style={s.lbl}>
-      {label}
-      <input style={{ ...s.field, opacity: 0.7 }} value={value == null ? "" : String(value)} readOnly disabled />
-    </label>
+// Картка клієнта з Meta — те, що Meta віддає про профіль (без власного зберігання даних).
+function MetaCard({ chat }: { chat: Chat }) {
+  const [d, setD] = useState<any | null>(null);
+  const [state, setState] = useState<"loading" | "ok" | "none">("loading");
+  const [why, setWhy] = useState("");
+  useEffect(() => {
+    setState("loading");
+    apiGet(`/api/chats?action=meta-profile&id=${chat.id}`)
+      .then((r) => { if (r.data) { setD(r.data); setState("ok"); } else { setWhy(r.meta_error || ""); setState("none"); } })
+      .catch(() => setState("none"));
+  }, [chat.id]);
+  const ig = d?.platform === "instagram";
+  const name = d ? (d.name || [d.first_name, d.last_name].filter(Boolean).join(" ") || d.username) : chat.visitor_name;
+  const row = (label: string, value: React.ReactNode) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: 13 }}>
+      <span style={s.muted}>{label}</span><span style={{ textAlign: "right" }}>{value}</span>
+    </div>
   );
-  const cur = chat.labels || [];
+  const yes = (v: any) => (v === true ? "так" : v === false ? "ні" : "—");
   return (
-    <div style={{ fontSize: 13 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: "rgba(245,166,35,0.12)", color: "var(--amber)", fontSize: 12, marginBottom: 10 }}>
-        <Lock size={13} /> Картка клієнта заморожена — лише перегляд
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        {d?.profile_pic || chat.avatar_url ? <img src={d?.profile_pic || chat.avatar_url!} style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover" }} alt="" /> : <div style={{ ...s.avatar, width: 56, height: 56 }}>{(name || "?").slice(0, 1)}</div>}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{name || "—"}</div>
+          {ig && d?.username && <a href={`https://instagram.com/${d.username}`} target="_blank" rel="noreferrer" style={{ color: "var(--amber)", fontSize: 12 }}>@{d.username}</a>}
+          <div style={s.muted}>{ig ? "Instagram" : "Messenger"}</div>
+        </div>
       </div>
-      {ro("Ім'я", chat.visitor_name)}
-      {ro("Телефон", chat.phone)}
-      {ro("Email", chat.email)}
-      {ro("Етап ліда", DEAL_STATUSES[chat.deal_status || "new"])}
-      {ro("Статус замовлення", ORDER_STATUSES[chat.lead_stage || ""])}
-      {ro("Маршрут", chat.route)}
-      {ro("Дата поїздки", chat.trip_date)}
-      {ro("Сума", chat.order_value)}
-      <div style={s.lbl}>Ярлики</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-        {cur.length === 0 && <span style={s.muted}>—</span>}
-        {cur.map((n) => { const l = labels.find((x) => x.name === n); return <span key={n} style={{ ...s.badge, color: l?.color || "#aaa", borderColor: l?.color || "#aaa" }}>{n}</span>; })}
-      </div>
-      <label style={s.lbl}>
-        Нотатки
-        <textarea style={{ ...s.field, minHeight: 80, fontFamily: "inherit", opacity: 0.7 }} value={chat.notes || ""} readOnly disabled />
-      </label>
+      {state === "loading" && <div style={s.muted}>Завантаження профілю з Meta…</div>}
+      {state === "none" && <div style={s.muted}>Meta не віддала профіль{why ? `: ${why}` : ""}.</div>}
+      {state === "ok" && ig && (
+        <>
+          {row("Підписників", d.follower_count ?? "—")}
+          {row("Підтверджений акаунт", yes(d.is_verified_user))}
+          {row("Підписаний на нас", yes(d.is_user_follow_business))}
+          {row("Ми підписані на нього", yes(d.is_business_follow_user))}
+        </>
+      )}
+      {chat.ad_id && row("Прийшов з реклами", chat.ad_title || "так")}
     </div>
   );
 }
