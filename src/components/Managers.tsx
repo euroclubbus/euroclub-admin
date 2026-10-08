@@ -48,7 +48,7 @@ export function Managers() {
         {list.map((m) => (
           <div key={m.id} style={row}>
             <b style={{ minWidth: 140 }}>{m.name}</b>
-            <span style={muted}>логін: {m.login}</span>
+            <span style={muted}>ID: {m.login}</span>
             <label style={chk}><input type="checkbox" checked={m.active} onChange={(e) => act(() => api("POST", { id: m.id, active: e.target.checked }))} /> активний</label>
             <label style={chk}><input type="checkbox" checked={m.canBypass} onChange={(e) => act(() => api("POST", { id: m.id, canBypass: e.target.checked }))} /> може обходити модерацію</label>
             <span style={muted}>{m.lastLoginAt ? `вхід ${new Date(m.lastLoginAt).toLocaleString("uk-UA")}` : "ще не входив"}</span>
@@ -59,7 +59,7 @@ export function Managers() {
         {list.length === 0 && <div style={muted}>Менеджерів ще немає</div>}
         <div style={{ ...row, marginTop: 12 }}>
           <input style={input} placeholder="Ім'я" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input style={input} placeholder="Логін" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} />
+          <input style={input} placeholder="ID менеджера (необов'язково)" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} />
           <input style={input} placeholder="Пароль" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           <label style={chk}><input type="checkbox" checked={form.canBypass} onChange={(e) => setForm({ ...form, canBypass: e.target.checked })} /> обхід модерації</label>
           <button style={primary} onClick={() => act(async () => { await api("POST", form); setForm({ name: "", login: "", password: "", canBypass: false }); })}>Додати</button>

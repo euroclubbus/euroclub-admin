@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, hashPassword, readSession, signSession } from "./session.js";
+import { adminDb, findUserByPassword, hashPassword, ownerPassword, readSession, signSession } from "./session.js";
 
 // Кеп (08.10): профіль користувача адмінки — ім'я і свій пароль (логін = id менеджера).
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -18,7 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const patch: Record<string, unknown> = {};
   if (typeof name === "string" && name.trim()) { patch.name = name.trim(); patch.nameCustom = true; }
   if (typeof password === "string" && password) {
-    if (password.length < 6) return res.status(400).json({ error: "Пароль мінімум 6 символів" });
+    if (password.length < 4) return res.status(400).json({ error: "Пароль мінімум 4 символи" });
+        if (password === ownerPassword() || (await findUserByPassword(password, s.id))) return res.status(400).json({ error: "Такий пароль уже зайнятий — оберіть інший" });
     Object.assign(patch, hashPassword(password));
   }
   await ref.update(patch);

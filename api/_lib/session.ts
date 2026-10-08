@@ -66,3 +66,12 @@ export function checkPassword(password: string, salt: string, hash: string): boo
   const expected = Buffer.from(hash, "hex");
   return h.length === expected.length && crypto.timingSafeEqual(h, expected);
 }
+
+// Кеп (08.10): вхід лише паролем — шукаємо активного користувача, чий пароль збігається.
+export async function findUserByPassword(password: string, exceptId?: string) {
+  const snap = await adminDb().collection("admin_users").get();
+  return snap.docs.find((d) => {
+    const u = d.data();
+    return d.id !== exceptId && u.hash && u.salt && checkPassword(password, u.salt, u.hash);
+  }) || null;
+}

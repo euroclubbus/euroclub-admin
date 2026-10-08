@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, checkPassword, ownerPassword, signSession, AdminSession } from "./session.js";
+import { adminDb, checkPassword, findUserByPassword, ownerPassword, signSession, AdminSession } from "./session.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Метод не підтримується" });
@@ -9,9 +9,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Без логіна — вхід власника старим паролем адмінки.
+    // Кеп (08.10): вхід лише паролем — пароль власника або пароль менеджера (паролі унікальні).
     if (!login) {
-      if (!ownerPassword() || password !== ownerPassword()) return res.status(401).json({ error: "Невірний пароль" });
-      const s: AdminSession = { id: "owner", name: "Власник", role: "owner", canBypass: true };
+      if (ownerPassword() && password === ownerPassword()) {
+        const s: AdminSession = { id: "owner", name: "Власник", role: "owner", canBypass: true };
+        return res.status(200).json({ token: signSession(s), user: s });
+      }
+      const doc = await findUserByPassword(password);
+      const u = doc?.data();
+      if (!doc || !u || u.active === false) return res.status(401).json({ error: "Невірний пароль" });
+      const s: AdminSession = { id: doc.id, name: u.name, role: "manager", canBypass: !!u.canBypass };
+      await doc.ref.update({ lastLoginAt: Date.now() });
       return res.status(200).json({ token: signSession(s), user: s });
     }
     const snap = await adminDb().collection("admin_users").where("login", "==", login).limit(1).get();

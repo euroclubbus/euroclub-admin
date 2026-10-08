@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { adminDb, hashPassword, readSession } from "./session.js";
+import { adminDb, findUserByPassword, hashPassword, ownerPassword, readSession } from "./session.js";
 
 // Керування менеджерами — тільки власник. Паролі зберігаються лише як scrypt-хеш.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -24,7 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (typeof canBypass === "boolean") data.canBypass = canBypass;
       if (typeof active === "boolean") data.active = active;
       if (typeof password === "string" && password) {
-        if (password.length < 6) return res.status(400).json({ error: "Пароль мінімум 6 символів" });
+        if (password.length < 4) return res.status(400).json({ error: "Пароль мінімум 4 символи" });
+        if (password === ownerPassword() || (await findUserByPassword(password, id ? String(id) : undefined))) return res.status(400).json({ error: "Такий пароль уже зайнятий — оберіть інший" });
         Object.assign(data, hashPassword(password));
       }
       if (data.login) {
@@ -35,7 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await col.doc(String(id)).update(data);
         return res.status(200).json({ ok: true, id });
       }
-      if (!data.name || !data.login || !data.hash) return res.status(400).json({ error: "Потрібні ім'я, логін і пароль" });
+      if (!data.login) data.login = `u${Date.now().toString(36)}`; // логін не обов'язковий — вхід паролем
+      if (!data.name || !data.hash) return res.status(400).json({ error: "Потрібні ім'я і пароль" });
       const ref = await col.add({ canBypass: false, active: true, ...data, createdAt: Date.now() });
       return res.status(200).json({ ok: true, id: ref.id });
     }

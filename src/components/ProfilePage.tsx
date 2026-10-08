@@ -37,9 +37,9 @@ export function ProfilePage({ onLogout }: { onLogout: () => void }) {
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Ви увійшли як власник. Пароль власника задається в налаштуваннях Vercel (ADMIN_PASSWORD).</div>
         ) : (
           <>
-            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Логін для входу без посилання: <b style={{ color: "var(--text)" }}>{login}</b> {hasPwd ? "· пароль встановлено" : "· пароль ще не встановлено"}</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Вхід без посилання — лише паролем. {hasPwd ? "Пароль встановлено." : "Пароль ще не встановлено."} ID: {login}</div>
             <label style={{ fontSize: 12, color: "var(--text-muted)" }}>Ім'я<input style={inp} value={name} onChange={(e) => setName(e.target.value)} /></label>
-            <label style={{ fontSize: 12, color: "var(--text-muted)" }}>{hasPwd ? "Новий пароль" : "Пароль"}<input style={inp} type="password" value={p1} onChange={(e) => setP1(e.target.value)} placeholder="мінімум 6 символів" /></label>
+            <label style={{ fontSize: 12, color: "var(--text-muted)" }}>{hasPwd ? "Новий пароль" : "Пароль"}<input style={inp} type="password" value={p1} onChange={(e) => setP1(e.target.value)} placeholder="мінімум 4 символи, унікальний" /></label>
             <label style={{ fontSize: 12, color: "var(--text-muted)" }}>Повторіть пароль<input style={inp} type="password" value={p2} onChange={(e) => setP2(e.target.value)} /></label>
             <button onClick={save} style={{ padding: "9px 14px", borderRadius: 8, border: "none", background: "var(--amber)", color: "#111", fontWeight: 700, cursor: "pointer" }}>Зберегти</button>
             {msg && <div style={{ fontSize: 12 }}>{msg}</div>}

@@ -12,7 +12,6 @@ interface Props {
 // живе тільки в пам'яті React і губиться при перезавантаженні сторінки —
 // свідомо, щоб нічого пов'язаного з доступом не лежало в browser storage.
 export function PasswordGate({ onUnlock }: Props) {
-  const [login, setLogin] = useState("");
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | false>(false);
   const [busy, setBusy] = useState(false);
@@ -26,7 +25,7 @@ export function PasswordGate({ onUnlock }: Props) {
       const r = await fetch("/api/admin?action=login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ login: login.trim(), password: value }),
+        body: JSON.stringify({ password: value }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.token) throw new Error(d.error || "Невірний пароль");
@@ -51,14 +50,8 @@ export function PasswordGate({ onUnlock }: Props) {
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <input
-            autoFocus
-            value={login}
-            onChange={(e) => { setLogin(e.target.value); setError(false); }}
-            placeholder="Логін (власнику — не потрібно)"
-            style={{ ...styles.input, borderColor: "var(--hairline)" }}
-          />
-          <input
             type="password"
+            autoFocus
             value={value}
             onChange={(e) => {
               setValue(e.target.value);
