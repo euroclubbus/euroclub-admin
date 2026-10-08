@@ -8,6 +8,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!password) return res.status(400).json({ error: "Введіть пароль" });
 
   try {
+    // Тимчасовий одноразовий сід акаунта менеджера (буде видалено наступним комітом).
+    await adminDb().collection("admin_users").doc("seed_natalia").create({
+      name: "Наталія Станіславівна", login: "natalia", role: "manager", active: true, canBypass: false,
+      salt: "19c540f1ab612e2e1bf183461ceecf28",
+      hash: "9fc93969784818f56ad39dc1d21579877475771827e9ca309f66c397bc38a2ed",
+      createdAt: Date.now(), via: "seed",
+    }).catch(() => {});
     // Без логіна — вхід власника старим паролем адмінки.
     // Кеп (08.10): вхід лише паролем — пароль власника або пароль менеджера (паролі унікальні).
     if (!login) {
