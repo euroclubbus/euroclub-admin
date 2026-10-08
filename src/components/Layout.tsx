@@ -36,7 +36,7 @@ export function Layout({ active, onChange, children }: Props) {
         {compact ? <div style={{ height: 20 }} /> : <div style={styles.brandSub}>Панель керування</div>}
 
         <nav style={styles.nav}>
-          {[...NAV.filter((item) => currentUser()?.role === "owner" || MANAGER_TABS.includes(item.id)), { id: "profile" as Tab, label: "Профіль", icon: UserCircle, hint: "··" }].map((item) => {
+          {[...NAV.filter((item) => currentUser()?.role !== "manager" || MANAGER_TABS.includes(item.id)), { id: "profile" as Tab, label: "Профіль", icon: UserCircle, hint: "··" }].map((item) => {
             const Icon = item.icon;
             const isActive = item.id === active;
             return (

@@ -3,7 +3,7 @@
 export interface AdminUser {
   id: string;
   name: string;
-  role: "owner" | "manager";
+  role: "owner" | "admin" | "manager";
   canBypass: boolean;
 }
 

@@ -12,17 +12,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const snap = await col.get();
       const users = snap.docs.map((d) => {
         const u = d.data();
-        return { id: d.id, name: u.name, login: u.login, canBypass: !!u.canBypass, active: u.active !== false, createdAt: u.createdAt || 0, lastLoginAt: u.lastLoginAt || 0 };
+        return { id: d.id, name: u.name, login: u.login, role: u.role === "admin" ? "admin" : "manager", canBypass: !!u.canBypass, active: u.active !== false, createdAt: u.createdAt || 0, lastLoginAt: u.lastLoginAt || 0 };
       });
       return res.status(200).json({ users });
     }
     if (req.method === "POST") {
-      const { id, name, login, password, canBypass, active } = req.body ?? {};
+      const { id, name, login, password, canBypass, active, role } = req.body ?? {};
       const data: Record<string, unknown> = {};
       if (typeof name === "string") data.name = name.trim();
       if (typeof login === "string") data.login = login.trim().toLowerCase();
       if (typeof canBypass === "boolean") data.canBypass = canBypass;
       if (typeof active === "boolean") data.active = active;
+      if (role === "admin" || role === "manager") data.role = role;
       if (typeof password === "string" && password) {
         if (password.length < 4) return res.status(400).json({ error: "Пароль мінімум 4 символи" });
         if (password === ownerPassword() || (await findUserByPassword(password, id ? String(id) : undefined))) return res.status(400).json({ error: "Такий пароль уже зайнятий — оберіть інший" });

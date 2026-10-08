@@ -10,7 +10,7 @@ import { getFirestore } from "firebase-admin/firestore";
 export interface AdminSession {
   id: string; // "owner" або id документа admin_users
   name: string;
-  role: "owner" | "manager";
+  role: "owner" | "admin" | "manager";
   canBypass: boolean; // право обходити автоматичну модерацію розсилок
 }
 

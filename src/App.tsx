@@ -6,6 +6,7 @@ import { TabGroup } from "./components/TabGroup";
 import { SidePromos } from "./components/SidePromos";
 import { AppVersionSettings } from "./components/AppVersionSettings";
 import { SsoKeySettings } from "./components/SsoKeySettings";
+import { AdminAccounts } from "./components/AdminAccounts";
 import { ProfilePage } from "./components/ProfilePage";
 import { currentUser, restoreSession, setSession } from "./lib/session";
 import { SupportCenter } from "./components/SupportCenter";
@@ -83,7 +84,8 @@ export default function App() {
           <header style={{ marginBottom: 24 }}>
             <h1 style={headerTitle}>Налаштування</h1>
           </header>
-          <SsoKeySettings />
+          {currentUser()?.role === "owner" && <AdminAccounts />}
+          {currentUser()?.role === "owner" && <SsoKeySettings />}
           <AppVersionSettings />
           <ExchangeRateSettings />
           <PricingCoefficientSettings />
