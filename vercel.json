@@ -19,17 +19,16 @@
       "schedule": "0 1 * * *"
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/",
-      "has": [
-        {
-          "type": "header",
-          "key": "content-type",
-          "value": "application/x-www-form-urlencoded.*"
-        }
+      "src": "/",
+      "methods": [
+        "POST"
       ],
-      "destination": "/api/admin?action=sso"
+      "dest": "/api/admin?action=sso"
+    },
+    {
+      "handle": "filesystem"
     }
   ]
 }
