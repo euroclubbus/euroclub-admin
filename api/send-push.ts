@@ -119,12 +119,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const notifTitle = title.trim();
     const notifBody = body.trim();
     const notifCreatedAt = new Date().toISOString();
+    // Кеп (08.10): id розсилки наперед — пишемо його в кожне сповіщення, щоб рахувати лайки/дизлайки по розсилці.
+    const campaignRef = db.collection("push_campaigns").doc();
+    const isSilent = req.body?.silent === true;
     {
       let batch = db.batch();
       let batchCount = 0;
       for (const uid of targetUserIds) {
         const ref = db.collection("notifications").doc(uid).collection("messages").doc();
-        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt, type: notifType, deepLink: deepLink ? String(deepLink) : null });
+        batch.set(ref, { title: notifTitle, body: notifBody, read: false, createdAt: notifCreatedAt, type: notifType, deepLink: deepLink ? String(deepLink) : null, campaignId: isSilent ? null : campaignRef.id });
         batchCount++;
         if (batchCount >= 400) {
           await batch.commit();
@@ -174,7 +177,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const silent = req.body?.silent === true; // відповіді у Вхідних не засмічують історію розсилок
     if (!silent) {
-      await db.collection("push_campaigns").add({
+      await campaignRef.set({
         title: title.trim(),
         body: body.trim(),
         deepLink: deepLink ? String(deepLink) : null,

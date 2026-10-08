@@ -1,3 +1,4 @@
+import { sessionHeaders } from "../lib/session";
 import { useEffect, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -30,6 +31,17 @@ const STATUS_COLOR: Record<PushCampaign["status"], string> = {
 export function PushHistory({ refreshKey, senderId }: { refreshKey: number; senderId?: string }) {
   const [campaigns, setCampaigns] = useState<PushCampaign[]>([]);
   const [loading, setLoading] = useState(true);
+  // Кеп (08.10): реакції в застосунку (👍/👎) і прочитання — по кожній розсилці і загалом.
+  type St = { sent: number; read: number; like: number; dislike: number };
+  const [stats, setStats] = useState<{ by: Record<string, St>; total: St } | null>(null);
+  useEffect(() => {
+    fetch("/api/admin?action=push-stats", { headers: sessionHeaders() })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setStats(d))
+      .catch(() => {});
+  }, [refreshKey]);
+  const statFor = (c: PushCampaign): St | null => stats ? stats.by[`id:${c.id}`] || stats.by[`t:${c.title}|${c.body}`] || null : null;
+  const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "—");
 
   useEffect(() => {
     const q = query(collection(db, COLLECTION), orderBy("sentAt", "desc"), limit(30));
@@ -51,6 +63,15 @@ export function PushHistory({ refreshKey, senderId }: { refreshKey: number; send
 
   return (
     <div>
+      {stats && (
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", padding: "12px 14px", marginBottom: 12, border: "1px solid var(--hairline)", borderRadius: "var(--radius)", fontSize: 13 }}>
+          <span>Загалом сповіщень: <b>{stats.total.sent}</b></span>
+          <span>Прочитано: <b>{stats.total.read}</b> ({pct(stats.total.read, stats.total.sent)})</span>
+          <span>👍 <b>{stats.total.like}</b></span>
+          <span>👎 <b>{stats.total.dislike}</b></span>
+          <span>Задоволених серед оцінок: <b>{pct(stats.total.like, stats.total.like + stats.total.dislike)}</b></span>
+        </div>
+      )}
       <div style={styles.boardHeader}>
         <span>ЗАГОЛОВОК</span>
         <span style={styles.colWhen}>КОЛИ</span>
@@ -78,7 +99,8 @@ export function PushHistory({ refreshKey, senderId }: { refreshKey: number; send
               <div style={styles.body}>{c.body}</div>
               <div style={{ ...styles.body, opacity: 0.7, marginTop: 2 }}>
                 {c.senderName ? `${c.senderName} · ` : ""}{c.segmentLabel ? `Сегмент: ${c.segmentLabel}` : c.segment ? `Сегмент: ${c.segment} клієнтів` : "Всім"}
-                {c.bypass ? " · без модерації" : ""}{c.dedupSkipped ? ` · пропущено дублів ${c.dedupSkipped}` : ""}
+                {c.bypass ? " · без модерації" : ""}
+                {(() => { const st = statFor(c); return st ? ` · прочитали ${st.read}/${st.sent} · 👍 ${st.like} · 👎 ${st.dislike}` : ""; })()}{c.dedupSkipped ? ` · пропущено дублів ${c.dedupSkipped}` : ""}
               </div>
             </div>
             <div style={{ ...styles.mono, ...styles.colWhen }}>{formatDate(c.sentAt)}</div>
