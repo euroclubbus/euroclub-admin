@@ -324,47 +324,20 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
                   <td style={styles.td}>Пасажир {p.index}</td>
                   <td style={styles.td}>{p.ticketNumber || "—"}</td>
                   <td style={styles.td}>
-                    <select value={p.discountName || "Повний тариф"} onChange={(e) => onDiscountChange(p.index, e.target.value)} style={styles.select}>
-                      {DISCOUNT_CATALOG.map((c) => (
-                        <option key={c.name} value={c.name}>
-                          {c.name} ({c.percent}%)
-                        </option>
-                      ))}
-                    </select>
+                    {p.discountName || "Повний тариф"}
                   </td>
                   <td style={styles.td}>
-                    <input type="number" value={p.tariff} onChange={(e) => onTariffChange(p.index, Number(e.target.value))} style={{ ...styles.input, width: 90 }} />
+                    {p.tariff}
                   </td>
                   <td style={styles.td}>
-                    <input type="number" value={p.price} onChange={(e) => onPriceChange(p.index, Number(e.target.value))} style={{ ...styles.input, width: 90, fontWeight: 700 }} />
+                    <strong>{p.price}</strong>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <div style={styles.footer}>
-            <div style={styles.totalLine}>
-              Усього: <strong>{total} ₴</strong>
-            </div>
-            <button onClick={saveChanges} disabled={!dirty || saving} style={{ ...styles.saveBtn, opacity: !dirty || saving ? 0.5 : 1 }}>
-              {saved ? <Check size={14} /> : saving ? "Збереження…" : "Зберегти зміни"}
-            </button>
-          </div>
-          <div style={styles.hint}>Після збереження застосунок покаже нову суму одразу при оновленні сторінки замовлення.</div>
-          {error && <div style={styles.error}>Помилка збереження: {error}</div>}
-
-          <button onClick={() => setPaidPatch(!paid)} style={styles.paidToggle}>
-            <div style={{
-              width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-              border: `2px solid ${paid ? "var(--amber)" : "var(--hairline-strong)"}`,
-              background: paid ? "var(--amber)" : "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {paid && <Check size={13} color="#1a1305" />}
-            </div>
-            <span style={{ fontWeight: 700, fontSize: 13.5 }}>{paid ? "Оплачено" : "Не оплачено"}</span>
-          </button>
+          {/* Кеп (08.10): реєстр лише для перегляду — усі зміни замовлень тільки через бекенд. */}
           <div style={styles.backendStatusLine}>
             {(() => {
               const bs = backendStatusLabel(order.backendStatus);
@@ -386,48 +359,14 @@ function OrderRow({ order, userStats, selected, onToggleSelect }: { order: Order
             {refreshError && <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{refreshError}</div>}
           </div>
 
-          {paid && (
+          {surcharges.length > 0 && (
             <div style={styles.surchargeBlock}>
-              <div style={styles.surchargeTitle}>Доплата (причина завжди вказується тут)</div>
-              <div style={styles.surchargeHint}>
-                Суму доплати застосунок бере: для замовлень в один бік — живою з бекенду (needpay), для замовлень в
-                два боки — з різниці нашої ціни й оплаченого. Тут вказуєш тільки ПРИЧИНУ — вона показується
-                користувачу поруч із сумою доплати. Доплату можна додати, відредагувати або видалити — усе
-                застосовується разом із рештою правок по кнопці "Зберегти зміни" вище.
-              </div>
-              {surcharges.length > 0 && (
-                <div style={styles.surchargeList}>
-                  {surcharges.map((s, i) => (
-                    <div key={i} style={styles.surchargeEditRow}>
-                      <select value={s.reason} onChange={(e) => editSurchargeLocal(i, { reason: e.target.value })} style={styles.select}>
-                        {SURCHARGE_REASONS.map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                        {!SURCHARGE_REASONS.includes(s.reason) && <option value={s.reason}>{s.reason}</option>}
-                      </select>
-                      <input type="number" value={s.amount} onChange={(e) => editSurchargeLocal(i, { amount: Number(e.target.value) })} style={{ ...styles.input, width: 80 }} />
-                      <span style={styles.mutedSmall}>{fmtDateTime(s.at)}</span>
-                      <button onClick={() => removeSurchargeLocal(i)} style={styles.iconBtn}>
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
+              <div style={styles.surchargeTitle}>Доплати</div>
+              {surcharges.map((s, i) => (
+                <div key={i} style={styles.surchargeEditRow}>
+                  <span>{s.reason}</span> <strong>{s.amount}</strong> <span style={styles.mutedSmall}>{fmtDateTime(s.at)}</span>
                 </div>
-              )}
-              <div style={styles.surchargeForm}>
-                <select value={scReason} onChange={(e) => setScReason(e.target.value)} style={styles.select}>
-                  {SURCHARGE_REASONS.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-                {scReason === "Інше" && (
-                  <input value={scCustom} onChange={(e) => setScCustom(e.target.value)} placeholder="Опис причини" style={{ ...styles.input, width: 140 }} />
-                )}
-                <input type="number" value={scAmount} onChange={(e) => setScAmount(e.target.value)} placeholder="Сума" style={{ ...styles.input, width: 80 }} />
-              <button onClick={addSurchargeLocal} disabled={!(Number(scAmount) > 0)} style={styles.addSurchargeBtn}>
-                <Plus size={13} /> Додати
-              </button>
-              </div>
+              ))}
             </div>
           )}
 

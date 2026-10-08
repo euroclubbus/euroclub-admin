@@ -5,6 +5,9 @@ import { Broadcasts } from "./components/Broadcasts";
 import { TabGroup } from "./components/TabGroup";
 import { SidePromos } from "./components/SidePromos";
 import { AppVersionSettings } from "./components/AppVersionSettings";
+import { SsoKeySettings } from "./components/SsoKeySettings";
+import { ProfilePage } from "./components/ProfilePage";
+import { currentUser, restoreSession, setSession } from "./lib/session";
 import { SupportCenter } from "./components/SupportCenter";
 import { SideMenuList } from "./components/SideMenuList";
 import { FleetList } from "./components/FleetList";
@@ -22,7 +25,15 @@ import { MetaDestinations } from "./components/MetaDestinations";
 import { ClientProfiles } from "./components/ClientProfiles";
 
 export default function App() {
-  const [unlocked, setUnlocked] = useState(false);
+  // Кеп (08.10): вхід за посиланням із системи (#sso=токен) або відновлення сесії вкладки.
+  const [unlocked, setUnlocked] = useState(() => {
+    if (typeof window !== "undefined" && window.location.hash.startsWith("#sso=")) {
+      setSession(decodeURIComponent(window.location.hash.slice(5)));
+      history.replaceState(null, "", window.location.pathname);
+      return !!currentUser();
+    }
+    return restoreSession();
+  });
   const [tab, setTab] = useState<Tab>("registry");
   const [refreshKey, setRefreshKey] = useState(0);
   const [pushSection, setPushSection] = useState<"marketing" | "service">("marketing");
@@ -50,6 +61,8 @@ export default function App() {
           { id: "pages", label: "Сторінки", render: () => <PagesList /> },
           { id: "promos", label: "Акції та Новини", render: () => <SidePromos /> },
         ]} />
+      ) : tab === "profile" ? (
+        <ProfilePage onLogout={() => setUnlocked(false)} />
       ) : tab === "support" ? (
         <SupportCenter />
       ) : tab === "registry" ? (
@@ -70,6 +83,7 @@ export default function App() {
           <header style={{ marginBottom: 24 }}>
             <h1 style={headerTitle}>Налаштування</h1>
           </header>
+          <SsoKeySettings />
           <AppVersionSettings />
           <ExchangeRateSettings />
           <PricingCoefficientSettings />

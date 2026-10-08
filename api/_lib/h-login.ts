@@ -17,6 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const snap = await adminDb().collection("admin_users").where("login", "==", login).limit(1).get();
     const doc = snap.docs[0];
     const u = doc?.data();
+    if (doc && u && !u.hash) return res.status(401).json({ error: "Пароль ще не встановлено — увійдіть за посиланням із системи і задайте його в «Профілі»" });
     if (!doc || !u || u.active === false || !checkPassword(password, u.salt, u.hash)) {
       return res.status(401).json({ error: "Невірний логін або пароль" });
     }
