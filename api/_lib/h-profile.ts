@@ -24,6 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   await ref.update(patch);
   const u = (await ref.get()).data()!;
-  const ns = { ...s, name: u.name };
+  const ns = { ...s, name: u.name, tabs: Array.isArray(u.tabs) ? u.tabs : undefined };
   return res.status(200).json({ ok: true, token: signSession(ns), user: ns });
 }

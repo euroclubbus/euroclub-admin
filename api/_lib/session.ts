@@ -12,6 +12,7 @@ export interface AdminSession {
   name: string;
   role: "owner" | "admin" | "manager";
   canBypass: boolean; // право обходити автоматичну модерацію розсилок
+  tabs?: string[]; // Кеп (08.10): вкладки, увімкнені власником; немає — за роллю
 }
 
 export function adminDb() {
@@ -50,7 +51,7 @@ export function readSession(req: VercelRequest): AdminSession | null {
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (!data.exp || data.exp < Date.now()) return null;
-    return { id: data.id, name: data.name, role: data.role, canBypass: !!data.canBypass };
+    return { id: data.id, name: data.name, role: data.role, canBypass: !!data.canBypass, tabs: Array.isArray(data.tabs) ? data.tabs : undefined };
   } catch {
     return null;
   }

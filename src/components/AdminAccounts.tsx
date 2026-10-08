@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { sessionHeaders } from "../lib/session";
+import { NAV, MANAGER_TABS } from "./Layout";
 
 // Кеп (08.10): акаунти адмінки (тільки власник). Нові акаунти — повний адмінський доступ.
-interface Acc { id: string; name: string; role: "admin" | "manager"; managerId: string; active: boolean; lastLoginAt: number }
+interface Acc { id: string; name: string; role: "admin" | "manager"; managerId: string; tabs: string[] | null; active: boolean; lastLoginAt: number }
 
 async function api(method: string, body?: unknown, query = "") {
   const r = await fetch(`/api/admin?action=users${query}`, { method, headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: body ? JSON.stringify(body) : undefined });
@@ -38,6 +39,17 @@ export function AdminAccounts() {
             <option value="manager">Менеджер</option>
           </select>
           <label style={chk}><input type="checkbox" checked={a.active} onChange={(e) => act(() => api("POST", { id: a.id, active: e.target.checked }))} /> активний</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, width: "100%", paddingLeft: 4 }}>
+            {NAV.filter((n) => n.id !== "accounts").map((n) => {
+              const cur = a.tabs ?? (a.role === "admin" ? NAV.filter((x) => x.id !== "accounts").map((x) => x.id as string) : (MANAGER_TABS as string[]));
+              const on = cur.includes(n.id);
+              return (
+                <label key={n.id} style={chk}>
+                  <input type="checkbox" checked={on} onChange={() => act(() => api("POST", { id: a.id, tabs: on ? cur.filter((t) => t !== n.id) : [...cur, n.id] }))} /> {n.label}
+                </label>
+              );
+            })}
+          </div>
           <span style={muted}>{a.lastLoginAt ? `вхід ${new Date(a.lastLoginAt).toLocaleString("uk-UA")}` : "ще не входив"}</span>
           <button style={ghost} onClick={() => { const p = prompt(`Новий пароль для ${a.name}`); if (p) act(() => api("POST", { id: a.id, password: p }), "Пароль змінено"); }}>Пароль</button>
           <button style={{ ...ghost, color: "var(--danger)" }} onClick={() => confirm(`Видалити ${a.name}?`) && act(() => api("DELETE", undefined, `&id=${a.id}`))}>Видалити</button>

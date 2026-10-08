@@ -71,7 +71,7 @@ content-type: ${esc(String(req.headers["content-type"] || ""))}</pre>`);
     active: true, canBypass: !!prev.canBypass, createdAt: prev.createdAt || Date.now(), lastLoginAt: Date.now(), via: "sso",
   }, { merge: true });
   const fresh = (await ref.get()).data()!;
-  const s: AdminSession = { id: ref.id, name: fresh.name, role: "manager", canBypass: !!fresh.canBypass };
+  const s: AdminSession = { id: ref.id, name: fresh.name, role: "manager", canBypass: !!fresh.canBypass, tabs: Array.isArray(fresh.tabs) ? fresh.tabs : undefined };
   const token = signSession(s);
   // Кеп (08.10): перехід на ІНШУ адресу (?sso=1), інакше браузер міняє лише #хеш на цій
   // сторінці без перезавантаження і «Вхід…» висить.

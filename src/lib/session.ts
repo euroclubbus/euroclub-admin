@@ -5,6 +5,7 @@ export interface AdminUser {
   name: string;
   role: "owner" | "admin" | "manager";
   canBypass: boolean;
+  tabs?: string[];
 }
 
 const KEY = "admin_session";
@@ -23,7 +24,7 @@ export function setSession(t: string, u?: AdminUser) {
   const d = u || decode(t);
   if (!d) return;
   token = t;
-  user = { id: d.id, name: d.name, role: d.role, canBypass: !!d.canBypass };
+  user = { id: d.id, name: d.name, role: d.role, canBypass: !!d.canBypass, tabs: Array.isArray(d.tabs) ? d.tabs : undefined };
   try { sessionStorage.setItem(KEY, t); } catch { /* */ }
 }
 export function restoreSession(): boolean {

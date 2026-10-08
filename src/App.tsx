@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { PasswordGate } from "./components/PasswordGate";
-import { Layout, Tab } from "./components/Layout";
+import { Layout, Tab, NAV, canSee } from "./components/Layout";
 import { Broadcasts } from "./components/Broadcasts";
 import { TabGroup } from "./components/TabGroup";
 import { SidePromos } from "./components/SidePromos";
@@ -35,7 +35,7 @@ export default function App() {
     }
     return restoreSession();
   });
-  const [tab, setTab] = useState<Tab>("registry");
+  const [rawTab, setTab] = useState<Tab>("registry");
   const [refreshKey, setRefreshKey] = useState(0);
   const [pushSection, setPushSection] = useState<"marketing" | "service">("marketing");
 
@@ -49,6 +49,8 @@ export default function App() {
   if (!unlocked) {
     return <PasswordGate onUnlock={() => setUnlocked(true)} />;
   }
+
+  const tab: Tab = rawTab === "profile" || canSee(rawTab) ? rawTab : (NAV.find((n) => canSee(n.id))?.id ?? "profile");
 
   return (
     <Layout active={tab} onChange={setTab}>

@@ -12,17 +12,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const snap = await col.get();
       const users = snap.docs.map((d) => {
         const u = d.data();
-        return { id: d.id, name: u.name, login: u.login, role: u.role === "admin" ? "admin" : "manager", managerId: u.managerId || "", canBypass: !!u.canBypass, active: u.active !== false, createdAt: u.createdAt || 0, lastLoginAt: u.lastLoginAt || 0 };
+        return { id: d.id, name: u.name, login: u.login, role: u.role === "admin" ? "admin" : "manager", managerId: u.managerId || "", tabs: Array.isArray(u.tabs) ? u.tabs : null, canBypass: !!u.canBypass, active: u.active !== false, createdAt: u.createdAt || 0, lastLoginAt: u.lastLoginAt || 0 };
       });
       return res.status(200).json({ users });
     }
     if (req.method === "POST") {
-      const { id, name, login, password, canBypass, active, role, managerId } = req.body ?? {};
+      const { id, name, login, password, canBypass, active, role, managerId, tabs } = req.body ?? {};
       const data: Record<string, unknown> = {};
       if (typeof name === "string") data.name = name.trim();
       if (typeof login === "string") data.login = login.trim().toLowerCase();
       if (typeof canBypass === "boolean") data.canBypass = canBypass;
       if (typeof active === "boolean") data.active = active;
+      if (Array.isArray(tabs)) data.tabs = tabs.map(String);
       if (typeof managerId === "string") data.managerId = managerId.trim();
       if (role === "admin" || role === "manager") data.role = role;
       if (typeof password === "string" && password) {

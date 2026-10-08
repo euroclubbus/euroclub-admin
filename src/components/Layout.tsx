@@ -10,7 +10,7 @@ interface Props {
   children: ReactNode;
 }
 
-const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
+export const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "01" },
   { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "02" },
   { id: "support", label: "Support Center", icon: Headphones, hint: "03" },
@@ -22,7 +22,15 @@ const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
 ];
 
 // Кеп (08.10): базові доступи менеджера (власник бачить усе; «Профіль» — для всіх).
-const MANAGER_TABS: Tab[] = ["registry", "support", "push"];
+export const MANAGER_TABS: Tab[] = ["registry", "support", "push"];
+
+export function canSee(id: Tab): boolean {
+  const u = currentUser();
+  if (id === "accounts") return u?.role === "owner";
+  if (u?.role === "owner") return true;
+  if (u?.tabs) return u.tabs.includes(id);
+  return u?.role !== "manager" || MANAGER_TABS.includes(id);
+}
 
 export function Layout({ active, onChange, children }: Props) {
   // Кеп (06.10): у Support Center меню згортається до іконок, сторінка — на всю ширину.
@@ -37,7 +45,7 @@ export function Layout({ active, onChange, children }: Props) {
         {compact ? <div style={{ height: 20 }} /> : <div style={styles.brandSub}>Панель керування</div>}
 
         <nav style={styles.nav}>
-          {[...NAV.filter((item) => item.id === "accounts" ? currentUser()?.role === "owner" : currentUser()?.role !== "manager" || MANAGER_TABS.includes(item.id)), { id: "profile" as Tab, label: "Профіль", icon: UserCircle, hint: "··" }].map((item) => {
+          {[...NAV.filter((item) => canSee(item.id)), { id: "profile" as Tab, label: "Профіль", icon: UserCircle, hint: "··" }].map((item) => {
             const Icon = item.icon;
             const isActive = item.id === active;
             return (
