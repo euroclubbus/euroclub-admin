@@ -62,6 +62,8 @@ export default function App() {
           { id: "pages", label: "Сторінки", render: () => <PagesList /> },
           { id: "promos", label: "Акції та Новини", render: () => <SidePromos /> },
         ]} />
+      ) : tab === "accounts" ? (
+        <AdminAccounts />
       ) : tab === "profile" ? (
         <ProfilePage onLogout={() => setUnlocked(false)} />
       ) : tab === "support" ? (
@@ -84,7 +86,6 @@ export default function App() {
           <header style={{ marginBottom: 24 }}>
             <h1 style={headerTitle}>Налаштування</h1>
           </header>
-          {currentUser()?.role === "owner" && <AdminAccounts />}
           {currentUser()?.role === "owner" && <SsoKeySettings />}
           <AppVersionSettings />
           <ExchangeRateSettings />

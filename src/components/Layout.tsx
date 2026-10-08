@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { currentUser } from "../lib/session";
 import { UserCircle, Headphones, Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
 
-export type Tab = "profile" | "support" | "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings";
+export type Tab = "profile" | "support" | "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings" | "accounts";
 
 interface Props {
   active: Tab;
@@ -18,6 +18,7 @@ const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "menu", label: "Бокове меню", icon: ListTree, hint: "05" },
   { id: "issues", label: "Технічні завдання", icon: AlertTriangle, hint: "06" },
   { id: "settings", label: "Налаштування", icon: Settings, hint: "07" },
+  { id: "accounts", label: "Акаунти", icon: ShieldCheck, hint: "08" },
 ];
 
 // Кеп (08.10): базові доступи менеджера (власник бачить усе; «Профіль» — для всіх).
@@ -36,7 +37,7 @@ export function Layout({ active, onChange, children }: Props) {
         {compact ? <div style={{ height: 20 }} /> : <div style={styles.brandSub}>Панель керування</div>}
 
         <nav style={styles.nav}>
-          {[...NAV.filter((item) => currentUser()?.role !== "manager" || MANAGER_TABS.includes(item.id)), { id: "profile" as Tab, label: "Профіль", icon: UserCircle, hint: "··" }].map((item) => {
+          {[...NAV.filter((item) => item.id === "accounts" ? currentUser()?.role === "owner" : currentUser()?.role !== "manager" || MANAGER_TABS.includes(item.id)), { id: "profile" as Tab, label: "Профіль", icon: UserCircle, hint: "··" }].map((item) => {
             const Icon = item.icon;
             const isActive = item.id === active;
             return (
