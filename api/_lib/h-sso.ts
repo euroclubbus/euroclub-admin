@@ -73,5 +73,11 @@ content-type: ${esc(String(req.headers["content-type"] || ""))}</pre>`);
   const fresh = (await ref.get()).data()!;
   const s: AdminSession = { id: ref.id, name: fresh.name, role: "manager", canBypass: !!fresh.canBypass };
   const token = signSession(s);
-  return page(res, 200, `Вхід… <script>location.replace('/#sso=' + encodeURIComponent(${JSON.stringify(token)}));</script>`);
+  // Кеп (08.10): перехід на ІНШУ адресу (?sso=1), інакше браузер міняє лише #хеш на цій
+  // сторінці без перезавантаження і «Вхід…» висить.
+  return page(res, 200, `<style>@keyframes s{to{transform:rotate(360deg)}}</style>
+<div style="display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:20vh">
+<div style="width:42px;height:42px;border:4px solid #333;border-top-color:#F5A623;border-radius:50%;animation:s .8s linear infinite"></div>
+<div>Вхід в адмінку EuroClub…</div></div>
+<script>location.replace('/?sso=1#sso=' + encodeURIComponent(${JSON.stringify(token)}));</script>`);
 }
