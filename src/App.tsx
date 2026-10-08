@@ -3,6 +3,8 @@ import { PasswordGate } from "./components/PasswordGate";
 import { Layout, Tab } from "./components/Layout";
 import { Broadcasts } from "./components/Broadcasts";
 import { TabGroup } from "./components/TabGroup";
+import { SidePromos } from "./components/SidePromos";
+import { AppVersionSettings } from "./components/AppVersionSettings";
 import { SupportCenter } from "./components/SupportCenter";
 import { SideMenuList } from "./components/SideMenuList";
 import { FleetList } from "./components/FleetList";
@@ -46,6 +48,7 @@ export default function App() {
           { id: "fleet", label: "Автопарк", render: () => <FleetList /> },
           { id: "routes", label: "Маршрути", render: () => <RoutesList /> },
           { id: "pages", label: "Сторінки", render: () => <PagesList /> },
+          { id: "promos", label: "Акції та Новини", render: () => <SidePromos /> },
         ]} />
       ) : tab === "support" ? (
         <SupportCenter />
@@ -67,6 +70,7 @@ export default function App() {
           <header style={{ marginBottom: 24 }}>
             <h1 style={headerTitle}>Налаштування</h1>
           </header>
+          <AppVersionSettings />
           <ExchangeRateSettings />
           <PricingCoefficientSettings />
         </div>

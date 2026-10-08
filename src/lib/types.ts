@@ -9,6 +9,7 @@ export const ICON_NAMES = [
   "Star",
   "Share2",
   "Info",
+  "Gamepad2",
 ] as const;
 
 export type IconName = (typeof ICON_NAMES)[number];
@@ -19,6 +20,7 @@ export interface SideMenuItem {
   icon: IconName;
   label: string;
   url: string;
+  hidden?: boolean;
 }
 
 export type PushCampaignStatus = "sent" | "partial" | "failed";

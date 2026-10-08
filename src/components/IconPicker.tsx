@@ -1,4 +1,4 @@
-import { FileText, Gift, Map, Bus, Star, Share2, Info } from "lucide-react";
+import { FileText, Gift, Map, Bus, Star, Share2, Info, Gamepad2 } from "lucide-react";
 import { ICON_NAMES, IconName } from "../lib/types";
 
 const ICON_MAP: Record<IconName, typeof FileText> = {
@@ -9,6 +9,7 @@ const ICON_MAP: Record<IconName, typeof FileText> = {
   Star,
   Share2,
   Info,
+  Gamepad2,
 };
 
 export function iconFor(name: IconName) {

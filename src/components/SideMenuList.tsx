@@ -9,7 +9,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { db } from "../lib/firebase";
 import { IconName, SideMenuItem } from "../lib/types";
 import { iconFor } from "./IconPicker";
@@ -62,6 +62,21 @@ export function SideMenuList() {
     }
   }
 
+  // Кеп (08.10): перший раз — заповнити тими пунктами, що зараз вбудовані в застосунок.
+  async function seedDefaults() {
+    const defs: { icon: IconName; label: string; url: string }[] = [
+      { icon: "Gamepad2", label: "🎮 Гра EuroClub Racer", url: "/game" },
+      { icon: "FileText", label: "Правила та умови перевезення", url: "https://eclub.com.ua/ua/oferta/" },
+      { icon: "Gift", label: "Cashback Club", url: "https://eclub.com.ua/ua/" },
+      { icon: "Map", label: "Маршрути", url: "/routes" },
+      { icon: "Bus", label: "Автопарк", url: "/fleet" },
+      { icon: "Star", label: "Залишити відгук", url: "/feedback" },
+      { icon: "Share2", label: "Ми в соцмережах", url: "/page/social" },
+      { icon: "Info", label: "Корисно знати", url: "https://eclub.com.ua/ua/" },
+    ];
+    for (let i = 0; i < defs.length; i++) await setDoc(doc(db, COLLECTION, crypto.randomUUID()), { ...defs[i], order: i });
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Видалити цей пункт меню?")) return;
     await deleteDoc(doc(db, COLLECTION, id));
@@ -109,7 +124,9 @@ export function SideMenuList() {
 
       {!loading && items.length === 0 && editingId === null && (
         <div style={styles.empty}>
-          Меню порожнє. Додайте перший пункт — він одразу з'явиться в додатку.
+          Меню в адмінці порожнє — застосунок показує вбудований список.{" "}
+          <button style={{ ...styles.iconBtn, width: "auto", padding: "4px 10px", display: "inline-flex" }} onClick={seedDefaults}>Заповнити поточними пунктами</button>
+          <div style={{ fontSize: 12, marginTop: 6 }}>Посилання з «/» відкриває екран застосунку (напр. /fleet, /routes, /page/promo), інакше — сайт.</div>
         </div>
       )}
 
@@ -153,12 +170,15 @@ export function SideMenuList() {
                 <Icon size={17} strokeWidth={2} color="var(--amber)" />
               </div>
 
-              <div style={styles.rowText}>
-                <div style={styles.rowLabel}>{item.label}</div>
+              <div style={{ ...styles.rowText, opacity: item.hidden ? 0.45 : 1 }}>
+                <div style={styles.rowLabel}>{item.label}{item.hidden ? " (вимкнено)" : ""}</div>
                 <div style={styles.rowUrl}>{item.url}</div>
               </div>
 
               <div style={styles.rowActions}>
+                <button style={styles.iconBtn} onClick={() => updateDoc(doc(db, COLLECTION, item.id), { hidden: !item.hidden })} title={item.hidden ? "Увімкнути" : "Вимкнути"}>
+                  {item.hidden ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
                 <button style={styles.iconBtn} onClick={() => setEditingId(item.id)} title="Редагувати">
                   <Pencil size={15} />
                 </button>
