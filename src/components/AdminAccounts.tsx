@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { sessionHeaders } from "../lib/session";
 
 // Кеп (08.10): акаунти адмінки (тільки власник). Нові акаунти — повний адмінський доступ.
-interface Acc { id: string; name: string; role: "admin" | "manager"; active: boolean; lastLoginAt: number }
+interface Acc { id: string; name: string; role: "admin" | "manager"; managerId: string; active: boolean; lastLoginAt: number }
 
 async function api(method: string, body?: unknown, query = "") {
   const r = await fetch(`/api/admin?action=users${query}`, { method, headers: { "Content-Type": "application/json", ...sessionHeaders() }, body: body ? JSON.stringify(body) : undefined });
@@ -15,6 +15,7 @@ export function AdminAccounts() {
   const [list, setList] = useState<Acc[]>([]);
   const [name, setName] = useState("");
   const [pass, setPass] = useState("");
+  const [mid, setMid] = useState("");
   const [msg, setMsg] = useState("");
 
   const load = () => api("GET").then((d) => setList(d.users)).catch((e) => setMsg(e.message));
@@ -31,6 +32,7 @@ export function AdminAccounts() {
       {list.map((a) => (
         <div key={a.id} style={row}>
           <b style={{ minWidth: 160 }}>{a.name}</b>
+          <button style={ghost} title="Змінити id_account" onClick={() => { const v = prompt(`id_account для ${a.name}`, a.managerId); if (v !== null) act(() => api("POST", { id: a.id, managerId: v })); }}>id_account: {a.managerId || "—"}</button>
           <select style={input} value={a.role} onChange={(e) => act(() => api("POST", { id: a.id, role: e.target.value }))}>
             <option value="admin">Адмін (повний доступ)</option>
             <option value="manager">Менеджер</option>
@@ -44,8 +46,9 @@ export function AdminAccounts() {
       {list.length === 0 && <div style={muted}>Акаунтів ще немає</div>}
       <div style={{ ...row, borderBottom: "none", marginTop: 10 }}>
         <input style={input} placeholder="Ім'я" value={name} onChange={(e) => setName(e.target.value)} />
+        <input style={input} placeholder="id_account" value={mid} onChange={(e) => setMid(e.target.value)} />
         <input style={input} placeholder="Пароль" value={pass} onChange={(e) => setPass(e.target.value)} />
-        <button style={primary} disabled={!name.trim() || !pass} onClick={() => act(() => api("POST", { name, password: pass, role: "admin" }).then(() => { setName(""); setPass(""); }), "Акаунт створено — вхід цим паролем")}>Створити</button>
+        <button style={primary} disabled={!name.trim() || !pass} onClick={() => act(() => api("POST", { name, password: pass, role: "admin", managerId: mid }).then(() => { setName(""); setPass(""); setMid(""); }), "Акаунт створено — вхід цим паролем")}>Створити</button>
       </div>
       {msg && <div style={{ ...muted, marginTop: 8 }}>{msg}</div>}
     </div>
