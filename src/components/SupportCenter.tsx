@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { currentUser, getSessionToken } from "../lib/session";
 import { ExternalLink, LogOut } from "lucide-react";
 import { apiPost, ECRM, EcrmUser, getEcrmUser, getToken, setAuth } from "./support/api";
 import { Chats } from "./support/Chats";
@@ -8,8 +9,20 @@ import { TabGroup } from "./TabGroup";
 // Кеп (06.10): EUROCLUB SUPPORT CENTER перенесено в адмінку (інтерфейс). Сервер, база Neon,
 // вебхуки й канали лишаються на ecrm — сюди звертаємось через його API.
 export function SupportCenter() {
-  const [me, setMe] = useState<EcrmUser | null>(() => (getToken() ? getEcrmUser() : null));
+  // Кеп (09.10): вхід у Support Center автоматично за сесією адмінки — профіль створюється сам.
+  const adminId = currentUser()?.id || "";
+  const bound = () => { try { return localStorage.getItem("ecrm_admin_id") === adminId; } catch { return false; } };
+  const [me, setMe] = useState<EcrmUser | null>(() => (getToken() && bound() ? getEcrmUser() : null));
+  const [auto, setAuto] = useState<"idle" | "busy" | "fail">(() => (getToken() && bound() ? "idle" : "busy"));
   const logout = () => { setAuth("", null); setMe(null); };
+
+  useEffect(() => {
+    if (auto !== "busy" || !getSessionToken()) { if (auto === "busy") setAuto("fail"); return; }
+    setAuth("", null);
+    apiPost<{ token: string; user: EcrmUser }>("/api/auth?action=admin-sso", { adminToken: getSessionToken() })
+      .then((d) => { setAuth(d.token, d.user); try { localStorage.setItem("ecrm_admin_id", adminId); } catch { /* */ } setMe(d.user); setAuto("idle"); })
+      .catch(() => setAuto("fail"));
+  }, [auto]);
 
   return (
     <div>
@@ -21,11 +34,13 @@ export function SupportCenter() {
           <a href={`${ECRM}/legacy.html`} target="_blank" rel="noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, color: "inherit" }}><ExternalLink size={13} /> Стара версія</a>
         </div>
       </div>
-      {!me ? (
-        <Login onDone={setMe} />
+      {!me && auto === "busy" ? (
+        <div style={{ color: "var(--text-muted)", fontSize: 13 }}>Вхід у Support Center…</div>
+      ) : !me ? (
+        <Login onDone={(u) => { try { localStorage.setItem("ecrm_admin_id", adminId); } catch { /* */ } setMe(u); }} />
       ) : (
         <TabGroup tabs={[
-          { id: "chats", label: "Чати", render: () => <Chats me={me} onAuthLost={logout} /> },
+          { id: "chats", label: "Чати", render: () => <Chats me={me} onAuthLost={() => { setMe(null); setAuto("busy"); }} /> },
           { id: "qr", label: "Швидкі відповіді", render: () => <QuickReplies me={me} /> },
           { id: "ratings", label: "Рейтинги", render: () => <Ratings me={me} /> },
           ...(me.role !== "manager" ? [{ id: "users", label: "Користувачі", render: () => <Users me={me} /> }] : []),

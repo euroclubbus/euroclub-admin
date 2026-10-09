@@ -44,6 +44,7 @@ export function clearSession() {
 export function currentUser(): AdminUser | null {
   return user;
 }
+export function getSessionToken(): string { return token; }
 export function sessionHeaders(): Record<string, string> {
   return token ? { "x-admin-session": token } : {};
 }
