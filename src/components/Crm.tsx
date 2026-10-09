@@ -42,7 +42,8 @@ export function Crm() {
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [order, setOrder] = useState<string[]>([]);
-  const [view, setView] = useState<"due" | "all">("due");
+  const [view, setView] = useState<"due" | "all" | "report">("due");
+  const isOwner = currentUser()?.role === "owner";
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -125,6 +126,7 @@ export function Crm() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         <button style={view === "due" ? primary : ghost} onClick={() => setView("due")}>На сьогодні ({rows.filter(isDue).length})</button>
         <button style={view === "all" ? primary : ghost} onClick={() => setView("all")}>Усі ({rows.length})</button>
+        {isOwner && <button style={view === "report" ? primary : ghost} onClick={() => setView("report")}>Звіт</button>}
         <input style={{ ...inp, flex: 1, minWidth: 180 }} placeholder="Пошук" value={q} onChange={(e) => setQ(e.target.value)} />
         <button style={ghost} onClick={load} disabled={busy}><RefreshCw size={13} /></button>
         {info?.sheetId && <a style={{ ...ghost, textDecoration: "none" }} href={`https://docs.google.com/spreadsheets/d/${info.sheetId}`} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Таблиця</a>}
@@ -133,7 +135,7 @@ export function Crm() {
       {view === "due" && <div style={{ ...muted, marginBottom: 8 }}>Нагадування на сьогодні й прострочені + заплановані поїздки на найближчі 14 днів (крім неактивних).</div>}
       {err && <div style={{ color: "var(--danger)", marginBottom: 10, fontSize: 13 }}>{err}</div>}
 
-      <div style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius)" }}>
+      {view === "report" ? <Report rows={rows} /> : <div style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius)" }}>
         <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
           <thead>
             <tr>
@@ -162,17 +164,19 @@ export function Crm() {
             {!shown.length && <tr><td style={{ ...td, ...muted }} colSpan={order.length + 1}>{busy ? "Завантаження…" : view === "due" ? "На сьогодні нікому дзвонити" : "Записів ще немає"}</td></tr>}
           </tbody>
         </table>
-      </div>
+      </div>}
 
       {edit && (
         <div style={overlay} onClick={() => setEdit(null)}>
           <div style={{ ...card, width: "min(720px, 94vw)", maxHeight: "90vh", overflowY: "auto", marginBottom: 0 }} onClick={(e) => e.stopPropagation()}>
             <div style={h}>{edit._row ? "Редагувати пасажира" : "Новий пасажир"}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-              {order.map((c) => (
-                <label key={c} style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, gridColumn: c === "Коментар" ? "1 / -1" : undefined }}>
-                  <span style={muted}>{c}{c === "Нагадування" ? " (дата)" : ""}</span>
-                  <Field col={c} value={String(edit[c] ?? "")} onChange={(v) => setEdit({ ...edit, [c]: v })} />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {order.map((c, i) => (
+                <label key={c} style={{ display: "grid", gridTemplateColumns: "minmax(140px, 200px) 1fr", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: 13 }}>
+                  <span style={{ color: "var(--text-muted)" }}>{i + 1}. {c}{c === "Нагадування" ? " (дата)" : ""}</span>
+                  {c === "Менеджер" && !isOwner
+                    ? <span>{String(edit[c] || currentUser()?.name || "")}</span>
+                    : <Field col={c} value={String(edit[c] ?? "")} onChange={(v) => setEdit({ ...edit, [c]: v })} />}
                 </label>
               ))}
             </div>
@@ -183,6 +187,37 @@ export function Crm() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Report({ rows }: { rows: Row[] }) {
+  const t = today(), w = plusDays(-7);
+  const by = new Map<string, Row[]>();
+  for (const r of rows) { const m = String(r["Менеджер"] || "—"); by.set(m, [...(by.get(m) || []), r]); }
+  const stat = (list: Row[]) => ({
+    total: list.length,
+    newW: list.filter((r) => String(r["Дата"] || "") >= w).length,
+    qual: list.filter((r) => r["Статус"] === "Кваліфікований").length,
+    act: list.filter((r) => r["Статус"] === "Активний").length,
+    inact: list.filter((r) => r["Статус"] === "Неактивний").length,
+    callsT: list.filter((r) => String(r["Дата і час дзвінка"] || "").slice(0, 10) === t).length,
+    callsW: list.filter((r) => { const d = String(r["Дата і час дзвінка"] || "").slice(0, 10); return d >= w && d <= t; }).length,
+    dueT: list.filter((r) => r["Статус"] !== "Неактивний" && String(r["Нагадування"] || "") === t).length,
+    overdue: list.filter((r) => { const d = String(r["Нагадування"] || ""); return r["Статус"] !== "Неактивний" && !!d && d < t; }).length,
+  });
+  const cols: [keyof ReturnType<typeof stat>, string][] = [["total", "Усього"], ["newW", "Нових за 7 дн."], ["qual", "Кваліфікованих"], ["act", "Активних"], ["inact", "Неактивних"], ["callsT", "Дзвінків сьогодні"], ["callsW", "Дзвінків за 7 дн."], ["dueT", "Нагадувань сьогодні"], ["overdue", "Прострочено"]];
+  const lines = [...by.entries()].map(([m, l]) => [m, stat(l)] as const).sort((a, b) => b[1].total - a[1].total);
+  const all = stat(rows);
+  return (
+    <div style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius)" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+        <thead><tr><th style={th}>Менеджер</th>{cols.map(([, l]) => <th key={l} style={th}>{l}</th>)}</tr></thead>
+        <tbody>
+          {lines.map(([m, st]) => <tr key={m}><td style={td}><b>{m}</b></td>{cols.map(([k]) => <td key={k} style={{ ...td, color: k === "overdue" && st[k] ? "var(--danger)" : undefined }}>{st[k]}</td>)}</tr>)}
+          <tr><td style={{ ...td, fontWeight: 700 }}>Разом</td>{cols.map(([k]) => <td key={k} style={{ ...td, fontWeight: 700 }}>{all[k]}</td>)}</tr>
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { adminDb, readSession } from "./session.js";
 export const CRM_COLUMNS = [
   "ID", "Номер замовлення", "Прізвище ім'я", "Телефон", "Місто 1", "Місто 2", "Джерело", "Дата",
   "Частота поїздок на рік", "Остання поїздка", "Запланована поїздка", "Передача",
-  "Дата і час дзвінка", "Акція", "Нагадування", "Коментар", "Статус",
+  "Дата і час дзвінка", "Акція", "Нагадування", "Коментар", "Статус", "Менеджер",
 ];
 
 function sa() {
@@ -115,9 +115,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const data = (req.body?.data || {}) as Record<string, string>;
       const row = Number(req.body?.row || 0);
       if (!row && !data["ID"]) data["ID"] = Date.now().toString(36).toUpperCase();
+      // Кеп (09.10): менеджер фіксується за профілем того, хто створив запис (не з форми).
+      if (s.role !== "owner") delete data["Менеджер"];
+      if (!row) data["Менеджер"] = s.name;
       if (row) {
         const cur = await g(`${id}/values/${encodeURIComponent(`'${title}'!A${row}:${colLetter(h.length - 1)}${row}`)}`);
         const old = cur.values?.[0] || [];
+        const mi = h.indexOf("Менеджер");
+        if (mi >= 0 && !old[mi] && !data["Менеджер"]) data["Менеджер"] = s.name;
         const vals = h.map((k, j) => (k in data ? String(data[k] ?? "") : old[j] ?? ""));
         await g(`${id}/values/${encodeURIComponent(`'${title}'!A${row}`)}?valueInputOption=RAW`, { method: "PUT", body: { values: [vals] } });
       } else {
