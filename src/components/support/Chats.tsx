@@ -4,6 +4,13 @@ import { Check, Lock, Pencil, Search, Send, Star, Trash2, Zap } from "lucide-rea
 import { db } from "../../lib/firebase";
 import { AppThreadChat, isUnread as appUnread, lastAt as appLastAt, Thread } from "../InboxList";
 import { apiGet, apiPost, AuthError, Chat, CHANNELS, DEAL_STATUSES, EcrmUser, Label, Message, ORDER_STATUSES, QuickReply, SOURCES, STATUS_LABELS } from "./api";
+import { currentUser } from "../../lib/session";
+
+// Кеп (09.10): Viber поки прибрано; продукти Meta (Messenger, Instagram, WhatsApp, коментарі)
+// бачить лише власник, доки не підключимо й не відпрацюємо на його профілі.
+const META_CH = ["facebook", "instagram", "whatsapp", "fb_comment", "ig_comment"];
+const IS_OWNER = () => currentUser()?.role === "owner";
+const HIDDEN_CH_FN = () => ["viber", ...(IS_OWNER() ? [] : META_CH)];
 import { Booking } from "./Booking";
 
 // Кеп (06.10): Support Center у стилі Meta Business Suite — усі чати (месенджери, сайт,
@@ -50,6 +57,8 @@ function load<T>(k: string, d: T): T {
 function save(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* */ } }
 
 export function Chats({ me, onAuthLost }: { me: EcrmUser; onAuthLost: () => void }) {
+  const HIDDEN_CH = HIDDEN_CH_FN();
+  const VIS_SOURCES = SOURCES.filter((x) => !x.channels || !x.channels.some((c) => HIDDEN_CH.includes(c)));
   const [source, setSource] = useState<string>(() => load("sc_source", "all"));
   const [filters, setFilters] = useState<{ unread: boolean; priority: boolean; ads: boolean }>(() => load("sc_filters", { unread: false, priority: false, ads: false }));
   const [search, setSearch] = useState("");
@@ -106,17 +115,17 @@ export function Chats({ me, onAuthLost }: { me: EcrmUser; onAuthLost: () => void
         unread: appUnread(t) ? 1 : 0, priority: last?.from === "user" && now - lastMs > UNANSWERED_MIN * 60000 && appUnread(t), fromAd: false, thread: t,
       };
     });
-    return [...a, ...b].sort((x, y) => y.lastMs - x.lastMs);
+    return [...a, ...b].filter((i) => !HIDDEN_CH.includes(i.channel)).sort((x, y) => y.lastMs - x.lastMs);
   }, [chats, threads]);
 
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const s of SOURCES) m[s.id] = items.filter((i) => (!s.channels || s.channels.includes(i.channel)) && i.unread > 0).length;
+    for (const s of VIS_SOURCES) m[s.id] = items.filter((i) => (!s.channels || s.channels.includes(i.channel)) && i.unread > 0).length;
     return m;
   }, [items]);
 
   const shown = useMemo(() => {
-    const src = SOURCES.find((s) => s.id === source) || SOURCES[0];
+    const src = VIS_SOURCES.find((s) => s.id === source) || VIS_SOURCES[0];
     const q = search.trim().toLowerCase();
     return items.filter((i) => {
       if (src.channels && !src.channels.includes(i.channel)) return false;
@@ -133,7 +142,7 @@ export function Chats({ me, onAuthLost }: { me: EcrmUser; onAuthLost: () => void
   return (
     <div>
       <div style={s.sources}>
-        {SOURCES.map((src) => (
+        {VIS_SOURCES.map((src) => (
           <button key={src.id} onClick={() => setSource(src.id)} style={{ ...s.srcTab, ...(source === src.id ? s.srcTabOn : {}) }}>
             {src.label}
             {counts[src.id] > 0 && <span style={s.srcCount}>{counts[src.id] > 9 ? "9+" : counts[src.id]}</span>}

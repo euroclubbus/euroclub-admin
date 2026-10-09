@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { currentUser } from "../lib/session";
 import { UserCircle, Headphones, Bell, ListTree, Truck, FileText, Waypoints, Inbox, BarChart3, Bus, ClipboardList, Settings, LineChart, Smartphone, Download, AlertTriangle, ShieldCheck, Target, Cake } from "lucide-react";
 
-export type Tab = "profile" | "support" | "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings" | "accounts";
+export type Tab = "profile" | "support" | "push" | "managers" | "menu" | "fleet" | "pages" | "routes" | "inbox" | "report" | "registry" | "marketing" | "channel" | "installs" | "issues" | "consents" | "metaDest" | "clients" | "settings" | "accounts" | "crm";
 
 interface Props {
   active: Tab;
@@ -12,6 +12,7 @@ interface Props {
 
 export const NAV: { id: Tab; label: string; icon: typeof Bell; hint: string }[] = [
   { id: "registry", label: "Реєстр замовлень", icon: ClipboardList, hint: "01" },
+  { id: "crm", label: "CRM", icon: Target, hint: "01·" },
   { id: "marketing", label: "Маркетинг", icon: LineChart, hint: "02" },
   { id: "support", label: "Support Center", icon: Headphones, hint: "03" },
   { id: "push", label: "Розсилки", icon: Bell, hint: "04" },

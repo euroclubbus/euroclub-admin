@@ -71,7 +71,6 @@ export const SOURCES: { id: string; label: string; channels: string[] | null }[]
   { id: "instagram", label: "Instagram", channels: ["instagram"] },
   { id: "whatsapp", label: "WhatsApp", channels: ["whatsapp"] },
   { id: "telegram", label: "Telegram", channels: ["telegram"] },
-  { id: "viber", label: "Viber", channels: ["viber"] },
   { id: "fbc", label: "Коментарі у Facebook", channels: ["fb_comment"] },
   { id: "igc", label: "Коментарі в Instagram", channels: ["ig_comment"] },
 ];

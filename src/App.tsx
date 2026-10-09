@@ -7,6 +7,7 @@ import { SidePromos } from "./components/SidePromos";
 import { AppVersionSettings } from "./components/AppVersionSettings";
 import { SsoKeySettings } from "./components/SsoKeySettings";
 import { AdminAccounts } from "./components/AdminAccounts";
+import { Crm } from "./components/Crm";
 import { ProfilePage } from "./components/ProfilePage";
 import { currentUser, restoreSession, setSession } from "./lib/session";
 import { SupportCenter } from "./components/SupportCenter";
@@ -64,6 +65,8 @@ export default function App() {
           { id: "pages", label: "Сторінки", render: () => <PagesList /> },
           { id: "promos", label: "Акції та Новини", render: () => <SidePromos /> },
         ]} />
+      ) : tab === "crm" ? (
+        <Crm />
       ) : tab === "accounts" ? (
         <AdminAccounts />
       ) : tab === "profile" ? (
